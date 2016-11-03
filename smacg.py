@@ -3,11 +3,19 @@
 import pycuda.driver as drv
 import pycuda.tools
 import pycuda.autoinit
-import numpy
+import numpy as np
 from pycuda.compiler import SourceModule
+from pycuda.gpuarray import to_gpu, zeros as gpuzeros
+
+XBLOCK=256
+XGRID=256
+YGRID=1
+YBLOCK=1
+N=5000
 
 smod = SourceModule("""
 #include <pycuda-complex.hpp>
+#include <stdio.h>
 
   typedef struct
   {
@@ -36,9 +44,11 @@ smod = SourceModule("""
 
 coef_atmos *ca ;
 
-__global__ void smacg(coef_atmos *ca, float tetas, float tetav, float phis, float phiv, float uh2o, float uo3, float taup550, float pression, float r_toa, float *r_surf)
+__global__ void smacg(coef_atmos *ca, float *tetasT, float *tetavT, float *phisT, float *phivT, float *uh2oT, float *uo3T, float *taup550T, float *pressionT, float *r_toaT, float *r_surf)
 
 {
+// current thread index
+const int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 /* Declarations SMAC */
 /*-------------------*/
@@ -52,7 +62,7 @@ float crd=180./M_PI;
 float cdr=M_PI/180.;
 
 float to3,th2o,to2, tco2;
-float  tco, tno2,tch4;
+float tco, tno2,tch4;
 float ttetas,ttetav,ksiD;
 float atm_ref;
 
@@ -65,16 +75,24 @@ float Peq ;
 float Res_ray, Res_aer, Res_6s;
 float ray_phase, ray_ref, aer_ref, aer_phase ;
 
-us = cos (threadIdx.tetas*cdr);
-uv = cos (threadIdx.tetav*cdr);
-dphi=(threadIdx.phis-threadIdx.phiv)*cdr;
-Peq=threadIdx.pression/1013.0;
+//
+float tetas=tetasT[idx], tetav=tetavT[idx], phis=phisT[idx], phiv=phivT[idx], uh2o=uh2oT[idx], uo3=uo3T[idx]; 
+float taup550=taup550T[idx], pression=pressionT[idx], r_toa=r_toaT[idx];
+//
+
+for (int ib=0; ib<1000; ib++) {
+
+us = cos (tetas*cdr);
+uv = cos (tetav*cdr);
+dphi=(phis-phiv)*cdr;
+Peq=pression/1013.0;
+
 
 /*------ 1) air mass */
 m =  1./us + 1./uv;
 
 /*------  2) aerosol optical depth in the spectral band, taup  */
-taup = (ca->a0taup) + (ca->a1taup) * threadIdx.taup550 ;
+taup = (ca->a0taup) + (ca->a1taup) * taup550 ;
 
 /*------  3) gaseous transmissions (downward and upward paths)*/
 to3 = 1. ;
@@ -90,7 +108,7 @@ uno2= pow (Peq , (ca->pno2));
 uco = pow (Peq , (ca->pco));
 
 /*------  4) if uh2o <= 0 and uo3 <= 0 no gaseous absorption is computed*/
-if( (threadIdx.uh2o > 0.) || ( threadIdx.uo3 > 0.) )
+if( (uh2o> 0.) || ( uo3 > 0.) )
 {
         to3   = exp ( (ca->ao3)  * pow ( (uo3 *m)  , (ca->no3)  ) ) ;
         th2o  = exp ( (ca->ah2o) * pow ( (uh2o*m)  , (ca->nh2o) ) ) ;
@@ -102,11 +120,11 @@ if( (threadIdx.uh2o > 0.) || ( threadIdx.uo3 > 0.) )
 }
 
 /*------  5) Total scattering transmission */
-ttetas = (ca->a0T) + (ca->a1T)*threadIdx.taup550/us + ((ca->a2T)*Peq + (ca->a3T))/(1.+us) ; /* downward */
-ttetav = (ca->a0T) + (ca->a1T)*threadIdx.taup550/uv + ((ca->a2T)*Peq + (ca->a3T))/(1.+uv) ; /* upward   */
+ttetas = (ca->a0T) + (ca->a1T)*taup550/us + ((ca->a2T)*Peq + (ca->a3T))/(1.+us) ; /* downward */
+ttetav = (ca->a0T) + (ca->a1T)*taup550/uv + ((ca->a2T)*Peq + (ca->a3T))/(1.+uv) ; /* upward   */
 
 /*------  6) spherical albedo of the atmosphere */
-s = (ca->a0s) * Peq +  (ca->a3s) + (ca->a1s)*threadIdx.taup550 + (ca->a2s) *pow (threadIdx.taup550 , 2) ;
+s = (ca->a0s) * Peq +  (ca->a3s) + (ca->a1s)*taup550 + (ca->a2s) *pow (taup550 , 2) ;
 
 /*------  7) scattering angle cosine */
 cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
@@ -177,10 +195,68 @@ tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
 
  /* reflectance at surface */
 /*------------------------*/
-  *r_surf = threadIdx.r_toa - (atm_ref * tg) ;
-  *r_surf = *r_surf / ( (tg * ttetas * ttetav) + (*r_surf * s) ) ;
+  r_surf[idx] = r_toa - (atm_ref * tg) ;
+  r_surf[idx] = r_surf[idx] / ( (tg * ttetas * ttetav) + (r_surf[idx] * s) ) ;
+
+} // main loop
 
 }""")
+
+type_coeff = [
+    ('ah2o',        'float32'),
+    ('nh2o',        'float32'), 
+    ('ao3',        'float32'), 
+    ('no3',        'float32'), 
+    ('ao2',        'float32'), 
+    ('no2',        'float32'), 
+    ('po2',        'float32'), 
+    ('aco2',        'float32'), 
+    ('nco2',        'float32'), 
+    ('pco2',        'float32'), 
+    ('ach4',        'float32'), 
+    ('nch4',        'float32'), 
+    ('pch4',        'float32'), 
+    ('ano2',        'float32'), 
+    ('nno2',        'float32'), 
+    ('pno2',        'float32'), 
+    ('aco',        'float32'), 
+    ('nco',        'float32'), 
+    ('pco',        'float32'), 
+    ('a0u',        'float32'), 
+    ('a1u',        'float32'), 
+    ('a2u',        'float32'), 
+    ('a0s',        'float32'), 
+    ('a1s',        'float32'), 
+    ('a2s',        'float32'), 
+    ('a3s',        'float32'), 
+    ('a0T',        'float32'), 
+    ('a1T',        'float32'), 
+    ('a2T',        'float32'), 
+    ('a3T',        'float32'), 
+    ('taur',        'float32'), 
+    ('sr',        'float32'), 
+    ('a0taup',        'float32'), 
+    ('a1taup',        'float32'), 
+    ('wo',        'float32'), 
+    ('gc',        'float32'), 
+    ('a0P',        'float32'), 
+    ('a1P',        'float32'), 
+    ('a2P',        'float32'), 
+    ('a3P',        'float32'), 
+    ('a4P',        'float32'), 
+    ('a5P',        'float32'), 
+    ('Resa1',        'float32'), 
+    ('Resa2',        'float32'), 
+    ('Resa3',        'float32'), 
+    ('Resa4',        'float32'), 
+    ('Resr1',        'float32'), 
+    ('Resr2',        'float32'), 
+    ('Resr3',        'float32'), 
+    ('Rest1',        'float32'), 
+    ('Rest2',        'float32'), 
+    ('Rest3',        'float32'), 
+    ('Rest4',        'float32')
+  ]
 
 class coeff:
   def __init__(self,smac_filename):
@@ -264,23 +340,40 @@ class coeff:
     self.Resa3   = float(temp[0])
     self.Resa4   = float(temp[1])
 
-
-smacg(drv.In(array(coeffs, coeff)), \
-     drv.In(array(tetas, float32)), \
-     drv.In(array(tetav, float32)), \
-     drv.In(array(phis, float32)), \
-     drv.In(array(phiv, float32)), \
-     drv.In(array(uh2o, float32)), \
-     drv.In(array(uo3, float32)), \
-     drv.In(array(taup550, float32)), \
-     drv.In(array(pression, float32)), \
-     drv.In(array(r_toa, float32)), \
-     drv.Out(array(r_surf, float32))
-    )
-
 if __name__=="__main__" :
-    #TODO charger les tetas, tetav, phis, phiv, uh2o, uo3, taup550, pression, r_toa
     #lecture des coeffs
-    coeffs=coeff('/chemin/vers/fichier/coeff')
+    coeffs=coeff('COEFFS/coef_NOAA14VIS_CONT.dat')
+    smacg_run = smod.get_function("smacg")
+    coeff1 = np.zeros((), dtype=type_coeff)
 
-smacg_run = smacg.get_function("smacg")
+    for k in coeffs.__dict__.keys():
+        coeff1[k] = coeffs.__dict__[k]
+
+    # Inputs arrays
+
+    tetas = np.linspace(30.,35.,num=N, dtype=np.float32)
+    tetav = np.linspace(0.,50.,num=N, dtype=np.float32)
+    phis  = np.zeros(N, dtype=np.float32)
+    phiv  = np.linspace(0.,360.,num=N, dtype=np.float32)
+    uh2o  = np.random.random(size=N)
+    uo3   = np.random.random(size=N)
+    taup550   = np.random.random(size=N)
+    pression   = np.random.random(size=N)* 50. + 975.
+    r_toa = np.linspace(0.1,0.15,num=N, dtype=np.float32)
+    r_surf  = gpuzeros(N, dtype=np.float32)
+
+    # run
+    smacg_run( to_gpu(coeff1), 
+             to_gpu(tetas) , 
+             to_gpu(tetav) , 
+             to_gpu(phis)  , 
+             to_gpu(phiv)  , 
+             to_gpu(uh2o.astype(np.float32)) , 
+             to_gpu(uo3.astype(np.float32)) , 
+             to_gpu(taup550.astype(np.float32)) , 
+             to_gpu(pression.astype(np.float32)), 
+             to_gpu(r_toa), 
+             r_surf, 
+             block=(XBLOCK, 1, 1), grid=(XGRID, 1, 1)
+            ) 
+
