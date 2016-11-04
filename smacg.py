@@ -1,17 +1,18 @@
 #!/bin/env python
-
-import pycuda.driver as drv
 import pycuda.tools
 import pycuda.autoinit
 import numpy as np
 from pycuda.compiler import SourceModule
 from pycuda.gpuarray import to_gpu, zeros as gpuzeros
 
-XBLOCK=256
+XBLOCK=128
 XGRID=256
 YGRID=1
 YBLOCK=1
-N=5000
+M=XBLOCK * XGRID
+Z = XBLOCK * 8
+N = M * Z
+NLOOP=100
 
 smod = SourceModule("""
 #include <pycuda-complex.hpp>
@@ -47,8 +48,13 @@ coef_atmos *ca ;
 __global__ void smacg(coef_atmos *ca, float *tetasT, float *tetavT, float *phisT, float *phivT, float *uh2oT, float *uo3T, float *taup550T, float *pressionT, float *r_toaT, float *r_surf)
 
 {
-// current thread index
+// current thread iudex
 const int idx = threadIdx.x + blockDim.x * blockIdx.x;
+const int NLOOP=100;
+const int XBLOCK=128;
+const int XGRID=128;
+const int M=XBLOCK * XGRID;
+const int Z = XBLOCK * 8;
 
 /* Declarations SMAC */
 /*-------------------*/
@@ -75,12 +81,15 @@ float Peq ;
 float Res_ray, Res_aer, Res_6s;
 float ray_phase, ray_ref, aer_ref, aer_phase ;
 
+for (int ib=0; ib<NLOOP; ib++) {
+for (int ip=0; ip<Z; ip++) {
 //
-float tetas=tetasT[idx], tetav=tetavT[idx], phis=phisT[idx], phiv=phivT[idx], uh2o=uh2oT[idx], uo3=uo3T[idx]; 
-float taup550=taup550T[idx], pression=pressionT[idx], r_toa=r_toaT[idx];
+unsigned long int ii = idx + ip*M;
+float tetas=tetasT[ii], tetav=tetavT[ii], phis=phisT[ii], phiv=phivT[ii], uh2o=uh2oT[ii], uo3=uo3T[ii]; 
+float taup550=taup550T[ii], pression=pressionT[ii], r_toa=r_toaT[ii];
 //
 
-for (int ib=0; ib<1000; ib++) {
+
 
 us = cos (tetas*cdr);
 uv = cos (tetav*cdr);
@@ -195,10 +204,11 @@ tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
 
  /* reflectance at surface */
 /*------------------------*/
-  r_surf[idx] = r_toa - (atm_ref * tg) ;
-  r_surf[idx] = r_surf[idx] / ( (tg * ttetas * ttetav) + (r_surf[idx] * s) ) ;
+  r_surf[ii] = r_toa - (atm_ref * tg) ;
+  r_surf[ii] = r_surf[ii] / ( (tg * ttetas * ttetav) + (r_surf[ii] * s) ) ;
 
-} // main loop
+} // main loop (ip)
+} // main loop (ib)
 
 }""")
 
@@ -340,40 +350,43 @@ class coeff:
     self.Resa3   = float(temp[0])
     self.Resa4   = float(temp[1])
 
+
 if __name__=="__main__" :
-    #lecture des coeffs
-    coeffs=coeff('COEFFS/coef_NOAA14VIS_CONT.dat')
+    coeffs=coeff('/home/did/RTC/smacg/COEFFS/coef_NOAA14VIS_CONT.dat')
     smacg_run = smod.get_function("smacg")
     coeff1 = np.zeros((), dtype=type_coeff)
 
     for k in coeffs.__dict__.keys():
         coeff1[k] = coeffs.__dict__[k]
 
-    # Inputs arrays
+# Inputs arrays
 
-    tetas = np.linspace(30.,35.,num=N, dtype=np.float32)
-    tetav = np.linspace(0.,50.,num=N, dtype=np.float32)
-    phis  = np.zeros(N, dtype=np.float32)
-    phiv  = np.linspace(0.,360.,num=N, dtype=np.float32)
-    uh2o  = np.random.random(size=N)
-    uo3   = np.random.random(size=N)
-    taup550   = np.random.random(size=N)
-    pression   = np.random.random(size=N)* 50. + 975.
-    r_toa = np.linspace(0.1,0.15,num=N, dtype=np.float32)
-    r_surf  = gpuzeros(N, dtype=np.float32)
+    tetas = np.linspace(30.,35.,num=N, dtype=np.float32).reshape((M,Z))
+    tetav = np.linspace(0.,50.,num=N, dtype=np.float32).reshape((M,Z))
+    phis  = np.zeros(N, dtype=np.float32).reshape((M,Z))
+    phiv  = np.linspace(0.,360.,num=N, dtype=np.float32).reshape((M,Z))
+    uh2o  = np.random.random(size=N).reshape((M,Z))
+    uo3   = np.random.random(size=N).reshape((M,Z))
+    taup550   = np.random.random(size=N).reshape((M,Z))
+    pression   = np.random.random(size=N).reshape((M,Z))* 50. + 975.
+    r_toa = np.linspace(0.1,0.15,num=N, dtype=np.float32).reshape((M,Z))
+    r_surf  = gpuzeros((M,Z), dtype=np.float32)
+
 
     # run
     smacg_run( to_gpu(coeff1), 
-             to_gpu(tetas) , 
-             to_gpu(tetav) , 
-             to_gpu(phis)  , 
-             to_gpu(phiv)  , 
-             to_gpu(uh2o.astype(np.float32)) , 
-             to_gpu(uo3.astype(np.float32)) , 
-             to_gpu(taup550.astype(np.float32)) , 
-             to_gpu(pression.astype(np.float32)), 
-             to_gpu(r_toa), 
-             r_surf, 
-             block=(XBLOCK, 1, 1), grid=(XGRID, 1, 1)
-            ) 
+         to_gpu(tetas) , 
+         to_gpu(tetav) , 
+         to_gpu(phis)  , 
+         to_gpu(phiv)  , 
+         to_gpu(uh2o.astype(np.float32)) , 
+         to_gpu(uo3.astype(np.float32)) , 
+         to_gpu(taup550.astype(np.float32)) , 
+         to_gpu(pression.astype(np.float32)), 
+         to_gpu(r_toa), 
+         r_surf, 
+         block=(XBLOCK, 1, 1), grid=(XGRID, 1, 1)
+        ) 
 
+    res=r_surf.get()
+    print '%d x %d = %d Pixels processed %d times'%(res.shape[0],res.shape[1],res.shape[0]*res.shape[1], NLOOP)
