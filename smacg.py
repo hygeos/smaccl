@@ -1,216 +1,26 @@
-#!/bin/env python
-import pycuda.tools
-import pycuda.autoinit
+#!/usr/bin/env python
+# encoding: utf-8
+
+'''
+SMAC-G
+SMAC atmospheric correction using GPU
+'''
+from __future__ import print_function, division
 import numpy as np
-from pycuda.compiler import SourceModule
+from os.path import dirname, realpath, join, exists
 from pycuda.gpuarray import to_gpu, zeros as gpuzeros
-
-XBLOCK=128
-XGRID=256
-YGRID=1
-YBLOCK=1
-M=XBLOCK * XGRID
-Z = XBLOCK * 8
-N = M * Z
-NLOOP=100
-
-smod = SourceModule("""
-#include <pycuda-complex.hpp>
-#include <stdio.h>
-
-  typedef struct
-  {
-   float ah2o, nh2o;
-   float ao3,  no3;
-   float ao2,  no2,  po2;
-   float aco2, nco2, pco2;
-   float ach4, nch4, pch4;
-   float ano2, nno2, pno2;
-   float aco,  nco,  pco;
-   float a0u, a1u, a2u ;
-   float a0s, a1s, a2s, a3s;
-   float a0T, a1T, a2T, a3T;
-   float taur,sr;
-   float a0taup, a1taup ;
-   float wo, gc;
-   float a0P,a1P,a2P,a3P;
-   float a4P,a5P;
-   float Resa1,Resa2;
-   float Resa3,Resa4;
-   float Resr1, Resr2, Resr3;
-   float Rest1,Rest2;
-   float Rest3,Rest4;
-
-  } coef_atmos ;
-
-coef_atmos *ca ;
-
-__global__ void smacg(coef_atmos *ca, float *tetasT, float *tetavT, float *phisT, float *phivT, float *uh2oT, float *uo3T, float *taup550T, float *pressionT, float *r_toaT, float *r_surf)
-
-{
-// current thread iudex
-const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-const int NLOOP=100;
-const int XBLOCK=128;
-const int XGRID=128;
-const int M=XBLOCK * XGRID;
-const int Z = XBLOCK * 8;
-
-/* Declarations SMAC */
-/*-------------------*/
-float cksi;
-float s;
-float m;
-float tg;
-float us,uv,dphi;
-
-float crd=180./M_PI;
-float cdr=M_PI/180.;
-
-float to3,th2o,to2, tco2;
-float tco, tno2,tch4;
-float ttetas,ttetav,ksiD;
-float atm_ref;
-
-float ak2, ak, e, f, dp, d, b, del, ww, ss, q1, q2, q3, c1, c2, cp1 ;
-float cp2, z, x, y, aa1, aa2, aa3 ;
-
-float uo2, uco2, uch4, uco, uno2  ;
-float taup,tautot,taurz;
-float Peq ;
-float Res_ray, Res_aer, Res_6s;
-float ray_phase, ray_ref, aer_ref, aer_phase ;
-
-for (int ib=0; ib<NLOOP; ib++) {
-for (int ip=0; ip<Z; ip++) {
-//
-unsigned long int ii = idx + ip*M;
-float tetas=tetasT[ii], tetav=tetavT[ii], phis=phisT[ii], phiv=phivT[ii], uh2o=uh2oT[ii], uo3=uo3T[ii]; 
-float taup550=taup550T[ii], pression=pressionT[ii], r_toa=r_toaT[ii];
-//
+import sys
+if sys.version_info[:2] >= (3, 0):
+        xrange = range
 
 
+# set up directories
+dir_root = dirname(realpath(__file__))
+dir_src = join(dir_root, 'src/')
+dir_bin = join(dir_root, 'bin/')
+src_device = join(dir_src, 'device.cu')
+binname =  join(dir_bin, 'sm.cubin')
 
-us = cos (tetas*cdr);
-uv = cos (tetav*cdr);
-dphi=(phis-phiv)*cdr;
-Peq=pression/1013.0;
-
-
-/*------ 1) air mass */
-m =  1./us + 1./uv;
-
-/*------  2) aerosol optical depth in the spectral band, taup  */
-taup = (ca->a0taup) + (ca->a1taup) * taup550 ;
-
-/*------  3) gaseous transmissions (downward and upward paths)*/
-to3 = 1. ;
-th2o= 1. ;
-to2 = 1. ;
-tco2= 1. ;
-tch4= 1. ;
-
-uo2= pow (Peq , (ca->po2));
-uco2= pow (Peq , (ca->pco2));
-uch4= pow (Peq , (ca->pch4));
-uno2= pow (Peq , (ca->pno2));
-uco = pow (Peq , (ca->pco));
-
-/*------  4) if uh2o <= 0 and uo3 <= 0 no gaseous absorption is computed*/
-if( (uh2o> 0.) || ( uo3 > 0.) )
-{
-        to3   = exp ( (ca->ao3)  * pow ( (uo3 *m)  , (ca->no3)  ) ) ;
-        th2o  = exp ( (ca->ah2o) * pow ( (uh2o*m)  , (ca->nh2o) ) ) ;
-        to2   = exp ( (ca->ao2)  * pow ( (uo2 *m)  , (ca->no2)  ) ) ;
-        tco2  = exp ( (ca->aco2) * pow ( (uco2*m)  , (ca->nco2) ) ) ;
-        tch4  = exp ( (ca->ach4) * pow ( (uch4*m)  , (ca->nch4) ) ) ;
-        tno2  = exp ( (ca->ano2) * pow ( (uno2*m)  , (ca->nno2) ) ) ;
-        tco   = exp ( (ca->aco)  * pow ( (uco*m)   , (ca->nco) ) ) ;
-}
-
-/*------  5) Total scattering transmission */
-ttetas = (ca->a0T) + (ca->a1T)*taup550/us + ((ca->a2T)*Peq + (ca->a3T))/(1.+us) ; /* downward */
-ttetav = (ca->a0T) + (ca->a1T)*taup550/uv + ((ca->a2T)*Peq + (ca->a3T))/(1.+uv) ; /* upward   */
-
-/*------  6) spherical albedo of the atmosphere */
-s = (ca->a0s) * Peq +  (ca->a3s) + (ca->a1s)*taup550 + (ca->a2s) *pow (taup550 , 2) ;
-
-/*------  7) scattering angle cosine */
-cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
-if (cksi < -1 ) cksi=-1.0 ;
-
-/*------  8) scattering angle in degree */
-ksiD = crd*acos(cksi) ;
-
-/*------  9) rayleigh atmospheric reflectance */
-/* pour 6s on a delta = 0.0279 */
-ray_phase = 0.7190443 * (1. + (cksi*cksi))  + 0.0412742 ;
-
-taurz=(ca->taur)*Peq;
-
-ray_ref   = ( taurz*ray_phase ) / (4.*us*uv) ;
-
-/*-----------------Residu Rayleigh ---------*/
-Res_ray= (ca->Resr1) + (ca->Resr2) * taurz*ray_phase / (us*uv) +
-         (ca->Resr3) * pow( (taurz*ray_phase/(us*uv)),2);
-
-/*------  10) aerosol atmospheric reflectance */
-aer_phase = (ca->a0P) + (ca->a1P)*ksiD + (ca->a2P)*ksiD*ksiD +(ca->a3P)*pow(ksiD,3) + (ca->a4P) * pow(ksiD,4);
-
-ak2 = (1. - (ca->wo))*(3. - (ca->wo)*3*(ca->gc)) ;
-ak  = sqrt(ak2) ;
-e   = -3.*us*us*(ca->wo) /  (4.*(1. - ak2*us*us) ) ;
-f   = -(1. - (ca->wo))*3.*(ca->gc)*us*us*(ca->wo) / (4.*(1. - ak2*us*us) ) ;
-dp  = e / (3.*us) + us*f ;
-d   = e + f ;
-b   = 2.*ak / (3. - (ca->wo)*3*(ca->gc));
-del = exp( ak*taup )*(1. + b)*(1. + b) - exp(-ak*taup)*(1. - b)*(1. - b) ;
-ww  = (ca->wo)/4.;
-ss  = us / (1. - ak2*us*us) ;
-q1  = 2. + 3.*us + (1. - (ca->wo))*3.*(ca->gc)*us*(1. + 2.*us) ;
-q2  = 2. - 3.*us - (1. - (ca->wo))*3.*(ca->gc)*us*(1. - 2.*us) ;
-q3  = q2*exp( -taup/us ) ;
-c1  =  ((ww*ss) / del) * ( q1*exp(ak*taup)*(1. + b) + q3*(1. - b) ) ;
-c2  = -((ww*ss) / del) * (q1*exp(-ak*taup)*(1. - b) + q3*(1. + b) ) ;
-cp1 =  c1*ak / ( 3. - (ca->wo)*3.*(ca->gc) ) ;
-cp2 = -c2*ak / ( 3. - (ca->wo)*3.*(ca->gc) ) ;
-z   = d - (ca->wo)*3.*(ca->gc)*uv*dp + (ca->wo)*aer_phase/4. ;
-x   = c1 - (ca->wo)*3.*(ca->gc)*uv*cp1 ;
-y   = c2 - (ca->wo)*3.*(ca->gc)*uv*cp2 ;
-aa1 = uv / (1. + ak*uv) ;
-aa2 = uv / (1. - ak*uv) ;
-aa3 = us*uv / (us + uv) ;
-
-aer_ref = x*aa1* (1. - exp( -taup/aa1 ) ) ;
-aer_ref = aer_ref + y*aa2*( 1. - exp( -taup / aa2 )  ) ;
-aer_ref = aer_ref + z*aa3*( 1. - exp( -taup / aa3 )  ) ;
-aer_ref = aer_ref / ( us*uv );
-
-/*--------Residu Aerosol --------*/
-Res_aer= ( (ca->Resa1) + (ca->Resa2) * ( taup * m *cksi ) + (ca->Resa3) * pow( (taup*m*cksi ),2) ) + (ca->Resa4) * pow( (taup*m*cksi),3);
-
-
-/*---------Residu 6s-----------*/
-tautot=taup+taurz;
-Res_6s= ( (ca->Rest1) + (ca->Rest2) * ( tautot * m *cksi )
-        + (ca->Rest3) * pow( (tautot*m*cksi),2) ) + (ca->Rest4) * pow( (tautot*m*cksi),3);
-
-/*------  11) total atmospheric reflectance */
-atm_ref = ray_ref - Res_ray + aer_ref - Res_aer + Res_6s;
-
-/*-------- reflectance at toa*/
-
-tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
-
- /* reflectance at surface */
-/*------------------------*/
-  r_surf[ii] = r_toa - (atm_ref * tg) ;
-  r_surf[ii] = r_surf[ii] / ( (tg * ttetas * ttetav) + (r_surf[ii] * s) ) ;
-
-} // main loop (ip)
-} // main loop (ib)
-
-}""")
 
 type_coeff = [
     ('ah2o',        'float32'),
@@ -351,42 +161,129 @@ class coeff:
     self.Resa4   = float(temp[1])
 
 
-if __name__=="__main__" :
-    coeffs=coeff('/home/did/RTC/smacg/COEFFS/coef_NOAA14VIS_CONT.dat')
-    smacg_run = smod.get_function("smacg")
-    coeff1 = np.zeros((), dtype=type_coeff)
+class Smacg(object):
 
-    for k in coeffs.__dict__.keys():
-        coeff1[k] = coeffs.__dict__[k]
+    def __init__(self):
 
-# Inputs arrays
+        import pycuda.autoinit
+        from pycuda.compiler import SourceModule
+        from pycuda.driver import module_from_buffer
 
-    tetas = np.linspace(30.,35.,num=N, dtype=np.float32).reshape((M,Z))
-    tetav = np.linspace(0.,50.,num=N, dtype=np.float32).reshape((M,Z))
-    phis  = np.zeros(N, dtype=np.float32).reshape((M,Z))
-    phiv  = np.linspace(0.,360.,num=N, dtype=np.float32).reshape((M,Z))
-    uh2o  = np.random.random(size=N).reshape((M,Z))
-    uo3   = np.random.random(size=N).reshape((M,Z))
-    taup550   = np.random.random(size=N).reshape((M,Z))
-    pression   = np.random.random(size=N).reshape((M,Z))* 50. + 975.
-    r_toa = np.linspace(0.1,0.15,num=N, dtype=np.float32).reshape((M,Z))
-    r_surf  = gpuzeros((M,Z), dtype=np.float32)
+        if exists(src_device):
+
+            # load device.cu
+            src_device_content = open(src_device).read()
+
+            # kernel compilation
+            self.mod = SourceModule(src_device_content,
+                               nvcc='nvcc',
+                               no_extern_c=True,
+                               cache_dir='/tmp/',
+                               include_dirs=[dir_src,
+                                            join(dir_src, 'incRNGs/Random123/')])
+
+        elif exists(binname):
+            # load existing binary
+            print('Loading binary', binname)
+            self.mod = module_from_buffer(open(binname, 'rb').read())
+
+        else:
+            raise IOError('Could not find {} or {}.'.format(src_device, binname))
+
+        # load the kernel
+        self.kernel = self.mod.get_function('smacg')
 
 
-    # run
-    smacg_run( to_gpu(coeff1), 
-         to_gpu(tetas) , 
-         to_gpu(tetav) , 
-         to_gpu(phis)  , 
-         to_gpu(phiv)  , 
-         to_gpu(uh2o.astype(np.float32)) , 
-         to_gpu(uo3.astype(np.float32)) , 
-         to_gpu(taup550.astype(np.float32)) , 
-         to_gpu(pression.astype(np.float32)), 
-         to_gpu(r_toa), 
-         r_surf, 
-         block=(XBLOCK, 1, 1), grid=(XGRID, 1, 1)
-        ) 
+    def copy_to_device(self, name, scalar, dtype):
+        from pycuda.driver import memcpy_htod
+        memcpy_htod(self.mod.get_global(name)[0], np.array([scalar], dtype=dtype))
 
-    res=r_surf.get()
-    print '%d x %d = %d Pixels processed %d times'%(res.shape[0],res.shape[1],res.shape[0]*res.shape[1], NLOOP)
+
+    def run(self, bands, tetas, tetav, phis, phiv,
+                uh2o, uo3, taup550, pression, rtoa,
+                XBLOCK=128, XGRID=128, NBLOOP=1):
+
+        '''
+        Run an atmospheric correction run using SMAC
+
+        Arguments:
+
+            - bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
+                    directory
+
+            - tetas: SZA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - tetav: VZA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - phis : SAA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - phiv : VAA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - uh2o : Water vapour column float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - uo3  : Ozone column float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - taup550  : AOT at 550 nm float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - pression : Surface pressure float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+
+            - rtoa : TOA reflectance float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
+                        and NB is the number of bands
+
+            - XBLOCK and XGRID: control the number of blocks and grid size for
+              the GPU execution
+
+            - NBLOOP: number of runs within a thread for the same pixel (should be used for Monte Carlo draws)
+
+        '''
+
+        NBAND = len(bands)
+        self.coeffs = np.zeros((NBAND), dtype=type_coeff)
+
+        for ib,band in enumerate(bands):
+            co = coeff(band)
+            for k in co.__dict__.keys():
+                self.coeffs[k] = co.__dict__[k]
+
+        shp = rtoa.shape
+        assert shp[-1] == NBAND
+        if (rtoa.ndim == 4) :
+            NZ  = shp[-2]
+        else : NZ=1
+
+        self.copy_to_device('NBLOOPd', NBLOOP, np.uint32)
+        self.copy_to_device('XBLOCKd', XBLOCK, np.uint32)
+        self.copy_to_device('XGRIDd' , XGRID,  np.uint32)
+        self.copy_to_device('NZd'    , NZ,     np.uint32)
+        self.copy_to_device('NBANDd' , NBAND,  np.uint32)
+
+        #output arrays
+        rsurf    = gpuzeros(shp, dtype=np.float32)
+        Jrtoa    = gpuzeros(shp, dtype=np.float32)
+        Juo3     = gpuzeros(shp, dtype=np.float32)
+        Juh2o    = gpuzeros(shp, dtype=np.float32)
+        Jpre     = gpuzeros(shp, dtype=np.float32)
+        Jtaup    = gpuzeros(shp, dtype=np.float32)
+
+
+        # run
+        self.kernel(to_gpu(self.coeffs), 
+        to_gpu(tetas) , 
+        to_gpu(tetav) , 
+        to_gpu(phis)  , 
+        to_gpu(phiv)  , 
+        to_gpu(uh2o.astype(np.float32)) , 
+        to_gpu(uo3.astype(np.float32)) , 
+        to_gpu(taup550.astype(np.float32)) , 
+        to_gpu(pression.astype(np.float32)), 
+        to_gpu(rtoa), 
+        rsurf,
+        Jrtoa,
+        Juo3,
+        Juh2o,
+        Jpre,
+        Jtaup,
+        block=(XBLOCK, 1, 1), grid=(XGRID, 1, 1)
+        )
+
+        return ( rsurf.get(), Jrtoa.get(), Juo3.get(), Juh2o.get(), Jpre.get(), Jtaup.get() )
