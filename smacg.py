@@ -248,8 +248,10 @@ class Smacg(object):
         shp = rtoa.shape
         assert shp[-1] == NBAND
         if (rtoa.ndim == 4) :
-            NZ  = shp[-2]
+            NZ  = shp[0]
+            #NZ  = shp[-2]
         else : NZ=1
+
 
         self.copy_to_device('NBLOOPd', NBLOOP, np.uint32)
         self.copy_to_device('XBLOCKd', XBLOCK, np.uint32)

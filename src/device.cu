@@ -10,7 +10,7 @@ __global__ void smacg(coef_atmos *ca, float *tetas_, float *tetav_, float *phis_
 {
 // current thread iudex
 const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-const int NRUN=3; // number of run necessary to compute some Jacobians with finite difference (here 2 Jacobians)
+const int NRUN=1003; // number of run necessary to compute some Jacobians with finite difference (here 2 Jacobians)
 const int M=XBLOCKd * XGRIDd;
 const float dpre = 10.;
 const float dtau_rel = 0.1;
@@ -51,8 +51,9 @@ for (int ib=0; ib<NBANDd; ib++) {
 
 //
 unsigned long int ii = idx + ip*M + ib*M*NZd;
-float tetas=tetas_[ii], tetav=tetav_[ii], phis=phis_[ii], phiv=phiv_[ii], uh2o=uh2o_[ii], uo3=uo3_[ii]; 
-float taup550=taup550_[ii], pression=pression_[ii], rtoa=rtoa_[ii];
+unsigned long int jj = idx + ip*M;
+float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
+float taup550=taup550_[jj], pression=pression_[jj], rtoa=rtoa_[ii];
 float dtau = dtau_rel * taup550;
 //
 if (ir==0) pression -= dpre;
@@ -210,8 +211,8 @@ tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
   }
   
 } // main loop (ib)
-} // main loop (ip)
 } // main loop (ir)
+} // main loop (ip)
 
 }
 
