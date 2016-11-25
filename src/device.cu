@@ -10,10 +10,11 @@ __global__ void smacg(coef_atmos *ca, float *tetas_, float *tetav_, float *phis_
 {
 // current thread iudex
 const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-const int NRUN=1003; // number of run necessary to compute some Jacobians with finite difference (here 2 Jacobians)
+const int NRUN=3 + NBLOOPd; // number of run necessary to compute some Jacobians with finite difference (here 2 Jacobians)
+                            // + 1 reference run + number of additional loops for MC
 const int M=XBLOCKd * XGRIDd;
-const float dpre = 10.;
-const float dtau_rel = 0.1;
+const float dpre = 10.; // absolute perturbation in pressure (hPa) for Jacobian
+const float dtau_rel = 0.1; // relative perturbation in AOT(550) for Jacobian
 
 /* Declarations SMAC */
 /*-------------------*/
@@ -189,8 +190,8 @@ tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
   float dtdu = (ca[ib].ao3*ca[ib].no3/uo3) * pow ( (uo3 *m) , (ca[ib].no3) ) * to3;
   float drdt = delta * ( (-atm_ref * tgp)  +
                rp * (atm_ref * s * tg - ttt)/to3 * delta);
-  Juo3[ii]   = drdt * dtdu;
-  
+  Juo3[ii]  = drdt * dtdu;
+
 /* Analytical Jacobian of surface reflectance vs water vapour column*/
 /*------------------------*/
   tgp  = tg/th2o;

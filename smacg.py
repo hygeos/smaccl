@@ -238,17 +238,17 @@ class Smacg(object):
         '''
 
         NBAND = len(bands)
-        self.coeffs = np.zeros((NBAND), dtype=type_coeff)
+        self.coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
 
         for ib,band in enumerate(bands):
             co = coeff(band)
             for k in co.__dict__.keys():
-                self.coeffs[k] = co.__dict__[k]
+                self.coeffs[k][ib] = co.__dict__[k]
 
         shp = rtoa.shape
-        assert shp[-1] == NBAND
+        assert shp[0] == NBAND
         if (rtoa.ndim == 4) :
-            NZ  = shp[0]
+            NZ  = shp[1]
             #NZ  = shp[-2]
         else : NZ=1
 
