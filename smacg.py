@@ -80,7 +80,7 @@ type_coeff = [
 
 class coeff:
   def __init__(self,smac_filename):
-    with file(smac_filename) as f:
+    with open(smac_filename) as f:
       lines=f.readlines()
     #H20
     temp=lines[0].strip().split()
@@ -159,7 +159,21 @@ class coeff:
     temp=lines[18].strip().split()
     self.Resa3   = float(temp[0])
     self.Resa4   = float(temp[1])
+    
+def get_smac_coeffs(bands):
+    '''
+    bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
+                        directory
+    '''
+    NBAND = len(bands)
+    coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
 
+    for ib,band in enumerate(bands):
+        co = coeff(band)
+        for k in co.__dict__.keys():
+            coeffs[k][ib] = co.__dict__[k] 
+
+    return coeffs
 
 class Smacg(object):
 
@@ -198,8 +212,8 @@ class Smacg(object):
         from pycuda.driver import memcpy_htod
         memcpy_htod(self.mod.get_global(name)[0], np.array([scalar], dtype=dtype))
 
-
-    def run(self, bands, tetas, tetav, phis, phiv,
+    
+    def run(self, coeffs, tetas, tetav, phis, phiv,
                 uh2o, uo3, taup550, pression, rtoa,
                 XBLOCK=128, XGRID=128, NBLOOP=1):
 
@@ -207,9 +221,8 @@ class Smacg(object):
         Run an atmospheric correction run using SMAC
 
         Arguments:
-
-            - bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
-                    directory
+       
+            - coeffs : a array containing the SMAC coefficents, of length NBAND, of type type_coeff
 
             - tetas: SZA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
 
@@ -237,13 +250,7 @@ class Smacg(object):
 
         '''
 
-        NBAND = len(bands)
-        self.coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
-
-        for ib,band in enumerate(bands):
-            co = coeff(band)
-            for k in co.__dict__.keys():
-                self.coeffs[k][ib] = co.__dict__[k]
+        NBAND = coeffs.size
 
         shp = rtoa.shape
         assert shp[0] == NBAND
@@ -266,10 +273,9 @@ class Smacg(object):
         Juh2o    = gpuzeros(shp, dtype=np.float32)
         Jpre     = gpuzeros(shp, dtype=np.float32)
         Jtaup    = gpuzeros(shp, dtype=np.float32)
-
-
-        # run
-        self.kernel(to_gpu(self.coeffs), 
+        
+        #run
+        self.kernel(to_gpu(coeffs), 
         to_gpu(tetas) , 
         to_gpu(tetav) , 
         to_gpu(phis)  , 
