@@ -1,0 +1,3 @@
+[submodule "geoutils"]
+	path = geoutils
+	url = git@gitlab.com:hygeos/geoutils.git
