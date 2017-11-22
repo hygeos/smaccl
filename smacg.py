@@ -259,7 +259,6 @@ class Smacg(object):
             #NZ  = shp[-2]
         else : NZ=1
 
-
         self.copy_to_device('NBLOOPd', NBLOOP, np.uint32)
         self.copy_to_device('XBLOCKd', XBLOCK, np.uint32)
         self.copy_to_device('XGRIDd' , XGRID,  np.uint32)
@@ -273,7 +272,7 @@ class Smacg(object):
         Juh2o    = gpuzeros(shp, dtype=np.float32)
         Jpre     = gpuzeros(shp, dtype=np.float32)
         Jtaup    = gpuzeros(shp, dtype=np.float32)
-        
+       
         #run
         self.kernel(to_gpu(coeffs), 
         to_gpu(tetas) , 
