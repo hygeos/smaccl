@@ -175,6 +175,13 @@ def get_smac_coeffs(bands):
 
     return coeffs
 
+def Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006):
+    T1 = np.log(R*T) - np.log(-R*lam*z+R*T)
+    return p0*np.exp(-g/(R*lam)*T1) 
+
+def dPsdz(z,p0,T, g=9.801, R=287.058, lam=-0.006):
+    return g*Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006)/(R*(T-lam*z))
+
 class Smacg(object):
 
     def __init__(self):
