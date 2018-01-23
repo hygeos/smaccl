@@ -1,0 +1,515 @@
+import numpy as np
+from luts import read_mlut, MLUT, Idx
+from smacg import Smacg, Ps, dPsdz, get_smac_coeffs
+import xarray
+from glob import glob
+import math
+import h5py
+from os.path import basename, exists, dirname
+from os import system
+
+def pre_merra2(faero, fptwo):
+    # Read MERRA2 ancillary data files and store all information into a MLUT object for further use
+    # (mainly for spatial and temporal interpolation)
+    merra = xarray.open_dataset(faero)
+    merra_lut = MLUT()
+    # Add the good axis
+    merra_lut.add_axis('time', date_to_float(merra.time.data)) # float array of delta time in ns from epoch time
+    merra_lut.add_axis('lat',  merra.lat.data)
+    merra_lut.add_axis('lon',  merra.lon.data)
+    merra_lut.add_dataset('TOTEXTTAU', merra['TOTEXTTAU'].data, axnames=['time','lat','lon'])
+
+    merra = xarray.open_dataset(fptwo)
+    merra_lut.add_dataset('TO3',  merra['TO3'].data,  axnames=['time','lat','lon'])
+    merra_lut.add_dataset('SLP',  merra['SLP'].data,  axnames=['time','lat','lon'])
+    merra_lut.add_dataset('T10M', merra['T10M'].data, axnames=['time','lat','lon'])
+    merra_lut.add_dataset('TQV',  merra['TQV'].data,  axnames=['time','lat','lon'])
+
+    # MLUT object description
+#    merra_lut.describe()
+
+    del merra
+
+    return merra_lut
+
+def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):
+    '''
+        transform the date into a duration in minutes since epoch
+            '''
+    return (d - epoch).astype(np.float64)/1.0e9/60.
+
+def pre_image(fname, aer_coef):
+
+    def get_meantime(dataset):
+        time = dataset.time_coverage_start
+        dt1  = np.datetime64(str(time[:4]) + '-' + str(time[4:6]) + '-' + str(time[6:8]) + 'T' + str(time[9:11]) + ':' + str(time[11:13]) + ':' + str(time[13:15]))
+        time = dataset.time_coverage_end
+        dt2  = np.datetime64(str(time[:4]) + '-' + str(time[4:6]) + '-' + str(time[6:8]) + 'T' + str(time[9:11]) + ':' + str(time[11:13]) + ':' + str(time[13:15]))
+
+        return ((dt2-dt1)/2. +dt1)
+
+    def to_float (dataset, elem):
+        res = dataset[elem] = dataset[elem] * float(dataset[elem].attrs['Scale']) + float(dataset[elem].attrs['Offset'])
+
+        return res
+
+    try:
+        xdataset = xarray.open_dataset(fname)
+    except:
+       return None, None, None, None, None
+        
+
+    try:
+        sensor = xdataset.sensor
+    except:
+        sensor = 'VGT'
+
+    # sensor switch
+    sensor = 'AVHRR/3' # forcage car l'attribut sensor n'existe pas toujours dans les images testdata
+    if sensor == 'AVHRR/3':
+       conv = {'ch1':'b1','ch2':'b2','sun_zen':'SZA', 'sun_azi':'SAA','sat_zen':'VZA','sat_azi':'VAA'}
+       xdataset.rename(conv, inplace=True)
+       tab_band_internal = ['b1','b2']
+       smac_coeff_name = ['NIR', 'VIS']
+
+#       if 'avhrr_b3a' in xdataset.data_vars.keys():
+#           tab_band_internal.append('b3a')
+#           conv = {'avhrr_b3a':'b3a'}
+#           xdataset.rename(conv, inplace=True)
+#           smac_coeff_name.append('MIR')
+
+       SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
+
+       for band in tab_band_internal:
+           if not('{}_unc'.format(band) in xdataset.data_vars.keys()):
+               void = xarray.DataArray(np.zeros((SIZE1, SIZE2), dtype='float32') + np.NaN, coords=[xdataset.Latitude,xdataset.Longitude], dims=['Latitude','Longitude'])
+               xdataset['{}_unc'.format(band)] = void
+
+       new_attrs = {'Scale':0.01, 'Offset':0.0} #
+       for band in tab_band_internal:
+           xdataset[band] = xdataset[band].assign_attrs(new_attrs)
+
+       try: 
+           platform = xdataset.platform.replace('-','')
+       except:
+           return None, None, None, None, None
+       smac_coeff_name = ['coef_{}_{}_{}.dat'.format(platform, x, aer_coef) for x in smac_coeff_name]
+
+       lon,lat=np.meshgrid(xdataset['Longitude'],xdataset['Latitude'])
+       xdataset['lat']=(('x', 'y'), lat)
+       xdataset['lon']=(('x', 'y'), lon)
+       # mean decimal time for the scene
+       try:
+           xdataset['mean-time']    = get_meantime(xdataset)
+       except:
+           time = basename(dirname(fname)).split('-')[3]
+           year = time[:4]
+           month = time[4:6]
+           day = time[6:8]
+           hour = time[8:10]
+           minute = time[10:12]
+           sec = time[12:]
+           if len(sec) == 1:
+               sec = '0{}'.format(sec)
+           xdataset['mean-time']  = np.datetime64(year + '-' + month + '-' + day + 'T' + hour + ':' + minute + ':' + sec)
+       xdataset['mean-time-dec']= date_to_float(xdataset['mean-time'].data)
+       # scale ref
+       for band in tab_band_internal:
+           to_float(xdataset, band)
+                                                       
+       return xdataset, SIZE1, SIZE2, tab_band_internal, smac_coeff_name
+
+def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, BREAKPOINT, INPUT):
+#    rsurf  = np.zeros((NB,SIZE1,SIZE2))
+#    Drsurf = np.zeros((NB,SIZE1,SIZE2))
+#    inter  = np.zeros((SIZE1,SIZE2)) + np.nan
+#    stock  = np.zeros((GSIZE))
+
+#    BREAKPOINT = False
+#    INPUT = False
+#
+#    if BREAKPOINT:
+#        Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
+#        Juo3   = np.zeros((NB,SIZE1,SIZE2))
+#        Juh2o  = np.zeros((NB,SIZE1,SIZE2))
+#        Jpre   = np.zeros((NB,SIZE1,SIZE2))
+#        Jtaup  = np.zeros((NB,SIZE1,SIZE2))
+#        Drtoa  = np.zeros((NB,SIZE1,SIZE2))
+#        Duo3   = np.zeros((NB,SIZE1,SIZE2))
+#        Duh2o  = np.zeros((NB,SIZE1,SIZE2))
+#        Dpre   = np.zeros((NB,SIZE1,SIZE2))
+#        Dtaup  = np.zeros((NB,SIZE1,SIZE2))
+#
+#    if INPUT:
+#        Irtoa  = np.zeros((NB,SIZE1,SIZE2))
+#        Iuo3   = np.zeros((SIZE1,SIZE2)) + np.nan
+#        Iuh2o  = np.zeros((SIZE1,SIZE2)) + np.nan
+#        Ipre   = np.zeros((SIZE1,SIZE2)) + np.nan
+#        Itaup  = np.zeros((SIZE1,SIZE2)) + np.nan
+#        Ialt   = np.zeros((SIZE1,SIZE2)) + np.nan
+#        Iuo3[good]   = uo3
+#        Iuh2o[good]  = uh2o
+#        Ipre[good]   = pressure
+#        Itaup[good]  = taup550
+#        Ialt[good]   = alt
+
+#    for i in range(NB):
+#        inter[good]  = rsurf_ext[i,:GSIZE]
+#        rsurf[i,:,:] = inter
+#
+#        if INPUT:
+#            inter[good] = rtoa[i,:]
+#            Irtoa[i,:,:]= inter
+#
+#        inter[good]  = abs(Jrtoa_ext[i,:GSIZE] * rtoa_err[i,:]               )
+#        if BREAKPOINT: Drtoa[i,:,:] = inter
+#        stock        = inter[good]**2
+#        inter[good]  = abs(Jtaup_ext[i,:GSIZE] * (Etaup + ERtaup * taup550  ))
+#        if BREAKPOINT: Dtaup[i,:,:] = inter
+#        stock       += inter[good]**2
+#        inter[good]  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
+#        if BREAKPOINT: Duo3[i,:,:]  = inter
+#        stock       += inter[good]**2
+#        inter[good]  = abs(Juh2o_ext[i,:GSIZE] * (Euh2o + ERuh2o * uh2o     ))
+#        if BREAKPOINT: Duh2o[i,:,:] = inter
+#        stock       += inter[good]**2
+#        inter[good]  = abs(Jpre_ext[i,:GSIZE] *  pressure_err)
+#        if BREAKPOINT: Dpre[i,:,:]  = inter
+#        stock       += inter[good]**2
+#
+#        inter[good]  = np.sqrt(stock/5.)
+#        Drsurf[i,:,:]= inter
+#
+#        if BREAKPOINT:
+#            inter[good]  = Jrtoa_ext[i,:GSIZE]
+#            Jrtoa[i,:,:] = inter
+#            inter[good]  = Juo3_ext[i,:GSIZE]
+#            Juo3[i,:,:]  = inter
+#            inter[good]  = Juh2o_ext[i,:GSIZE]
+#            Juh2o[i,:,:] = inter
+#            inter[good]  = Jpre_ext[i,:GSIZE]
+#            Jpre[i,:,:]  = inter
+#            inter[good]  = Jtaup_ext[i,:GSIZE]
+#            Jtaup[i,:,:] = inter
+#
+#        del inter
+#        del stock
+
+    out = h5py.File(filename, 'a')
+
+    for att, value in data.attrs.items():
+        out.attrs[att] = value
+
+    out.create_dataset('Latitude', data['Latitude'].shape, dtype='float32', compression='gzip', compression_opts=9)
+    out['Latitude'].attrs['Unit'] = 'degree'
+    out.create_dataset('Longitude', data['Longitude'].shape, dtype='float32', compression='gzip', compression_opts=9)
+    out['Longitude'].attrs['Unit'] = 'degree'
+    out.create_dataset('rtoc', rsurf.shape, dtype='float32', compression='gzip', compression_opts=9)
+    out['rtoc'].attrs['long_name'] = 'Top of Canopy Reflectance'
+    out['rtoc'].attrs['unit'] = 'None'
+    out.create_dataset('Drtoc', Drsurf.shape, dtype='float32', compression='gzip', compression_opts=9)
+    out['Drtoc'].attrs['long_name'] = 'Uncertainty Top of Canopy Reflectance'
+    out['Drtoc'].attrs['unit'] = 'None'
+
+    if BREAKPOINT:
+        out.create_dataset('Drtoa', Drtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('Duo3', Duo3.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('Duh2o', Duh2o.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('Dpre', Dpre.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('Dtaup', Dtaup.shape, dtype='float32', compression='gzip', compression_opts=9)
+
+#    if INPUT:
+#        out.create_dataset('rtoa', Irtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
+#        out.create_dataset('uo3',  Iuo3.shape, dtype='float32', compression='gzip', compression_opts=9)
+#        out.create_dataset('uh2o', Iuh2o.shape, dtype='float32', compression='gzip', compression_opts=9)
+#        out.create_dataset('pre', Ipre.shape, dtype='float32', compression='gzip', compression_opts=9)
+#        out.create_dataset('taup', Itaup.shape, dtype='float32', compression='gzip', compression_opts=9)
+#        out.create_dataset('alt', Ialt.shape, dtype='float32', compression='gzip', compression_opts=9)
+
+    out['rtoc'][:]      = rsurf
+    out['Drtoc'][:]     = Drsurf
+    out['Latitude'][:]  = data['Latitude'].data
+    out['Longitude'][:] = data['Longitude'].data
+
+    if BREAKPOINT:
+        out['Drtoa'][:] = Drtoa
+        out['Duo3'][:]  = Duo3
+        out['Duh2o'][:] = Duh2o
+        out['Dpre'][:]  = Dpre
+        out['Dtaup'][:] = Dtaup
+        
+    if INPUT:
+        out['rtoa'][:]  = Irtoa
+        out['uo3'][:]   = Iuo3
+        out['uh2o'][:]  = Iuh2o
+        out['pre'][:]   = Ipre
+        out['taup'][:]  = Itaup
+        out['alt'][:]   = Ialt
+
+    out.close()
+
+
+def main(filein, fileout, dem_lut, S):
+
+#    path_i = '/rfs/data/C3S'
+#    fname_i = '2001_2'
+#
+#    fname = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-2003040211561-fv0001.nc/testdata_Hornsund.nc'
+#    fname = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-2003040211561-fv0001.nc/testdata_Ny_Alesund.nc'
+    fname = filein
+
+    # SMACG configuration
+    XBLOCK = 512
+    XGRID = 512
+    YGRID = 1
+    YBLOCK = 1
+    NBLOOP = 1
+
+    aer_coef = 'CONT'
+    dir_coef_name = './'
+
+    version = '1.0'
+
+    k_uh2o = 1e-1
+    k_uo3 = 1e-3
+    k_p0 = 1e-2
+
+    Etoa = 0
+    ERtoa = 0.01
+    Etaup = 0.05
+    ERtaup = 0.15
+    Euo3 = 0.0
+    ERuo3 = 0.06
+    Euh2o = 0.0
+    ERuh2o = 0.2
+    Epre = 1.0
+    ERpre = 0.0
+
+
+    data, SIZE1, SIZE2, tab_band_internal, smac_coeff_name = pre_image(fname, aer_coef)
+    if data is None:
+        print("l'image n'a pas d'attributs")
+        return
+
+
+
+    year = str(data['mean-time'].values)[:4]
+    month = str(data['mean-time'].values)[5:7]
+    day = str(data['mean-time'].values)[8:10]
+
+    # path to input ancillary MERRA 2 data
+    # 1) aerosols
+    merra_aerosol='/rfs/data/MERRA2/aer_extinction/{0}/*MERRA2_*.tavg1_2d_aer_Nx.{0}{1}{2}*.nc4'.format(year, month, day)
+    merra_aerosol=glob(merra_aerosol)[0]
+    # 2) PTWO, Pressure, Temperature, Water vapour ,Ozone
+    merra_ptwo='/rfs/data/MERRA2/surf_pression_water_vapor/{0}/*MERRA2_*.tavg1_2d_slv_Nx.{0}{1}{2}*.nc4'.format(year, month, day)
+    merra_ptwo=glob(merra_ptwo)[0]
+
+    merra_lut = pre_merra2(merra_aerosol, merra_ptwo)
+
+    # files containg SMAC coefficients
+
+    bands_path = ["".join((dir_coef_name, 'COEFFS/'+x)) for x in smac_coeff_name]
+    # masking cloudy & out of orbit pixels and SZA above 90°
+    SM   = data['clm'].data
+    SZA  = data['SZA'].data
+    good = np.where((SM == 0) & (SZA < 90))
+    if len(good[0]) == 0:
+        print('image nuageuse')
+        return
+#    good = np.where((SZA < 90))
+    GSIZE= good[0].size
+    NB = len(tab_band_internal)
+
+    # start with tie points
+    tetas       = data['SZA'].data[good].astype(np.float32, order='C')
+    tetav       = data['VZA'].data[good].astype(np.float32, order='C')
+    phis        = data['SAA'].data[good].astype(np.float32, order='C')
+    phiv        = data['VAA'].data[good].astype(np.float32, order='C')
+
+    lat         = data['lat'].data[good]
+    lon         = data['lon'].data[good]
+    t0          = data['mean-time-dec'].data
+
+    #interpolate merra 2 data and dem to the image location and time
+    taup550 = merra_lut['TOTEXTTAU'][Idx(t0,  round=False, fill_value='extrema'), Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
+    uh2o = merra_lut['TQV'][Idx(t0,  round=False, fill_value='extrema'), Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
+    uo3 = merra_lut['TO3'][Idx(t0,  round=False, fill_value='extrema'), Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
+    p0 = merra_lut['SLP'][Idx(t0,  round=False, fill_value='extrema'), Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
+    t10m = merra_lut['T10M'][Idx(t0,  round=False, fill_value='extrema'), Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')
+    #interpolate DEM and uncertainty to the image location and time
+    alt = dem_lut['elev'][Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
+    Dalt = dem_lut['Delev'][Idx(lat, round=False, fill_value='extrema'), Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')
+
+    # pressure correction for surface altitude and transformation from Pa to hPa
+    pressure = Ps(alt, p0*k_p0, t10m)
+    # quadratic mean of error due to met fields (Epre) and error due to altitude (Dalt)
+    pressure_err = np.sqrt((dPsdz(alt, p0*k_p0, t10m) * Dalt)**2 + Epre**2)/2.
+    # conversion from kg.m-2 to g.cm-2
+    uh2o *= k_uh2o
+    # conversion from Dobson to cm.atm 
+    uo3  *= k_uo3
+
+    # prepare radiometry array
+    rtoa        = np.zeros((NB, GSIZE), dtype='float32', order='C')
+    rtoa_err    = np.zeros((NB, GSIZE), dtype='float32', order='C')
+    for iband, band in enumerate(tab_band_internal):
+            rtoa[iband,:]     = data[band].data[good]
+            rtoa_err[iband,:] = data[band+'_unc'].data[good]
+
+    Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
+    GSIZEXT = Z * XBLOCK * XGRID
+
+    # the \"ext\" suffix is for extended arrays, larger than the good pixels size, it is completed by NaN's\n",
+    rtoa_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+    taup550_ext  = np.zeros((GSIZEXT), dtype='float32') + np.NaN                                                                                                               
+    uo3_ext      = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    pressure_ext = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    uh2o_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    tetas_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    phis_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+    for i in range(NB):
+        rtoa_ext[i,:GSIZE] = rtoa[i,:]
+    taup550_ext[:GSIZE]  = taup550
+    uo3_ext[:GSIZE]      = uo3
+    pressure_ext[:GSIZE] = pressure
+    uh2o_ext[:GSIZE]     = uh2o
+    tetas_ext[:GSIZE]    = tetas
+    tetav_ext[:GSIZE]    = tetav
+    phis_ext[:GSIZE]     = phis
+    phiv_ext[:GSIZE]     = phiv
+
+    #Getting SMAC coefficients
+    coeffs     = get_smac_coeffs(bands_path)
+
+    # Input arrays reshaping
+    rtoa_ext     = np.reshape(rtoa_ext,    (NB,Z,XBLOCK,XGRID), order='C')
+    tetas_ext    = np.reshape(tetas_ext,   (Z,XBLOCK,XGRID),    order='C')
+    tetav_ext    = np.reshape(tetav_ext,   (Z,XBLOCK,XGRID),    order='C')
+    phis_ext     = np.reshape(phis_ext,    (Z,XBLOCK,XGRID),    order='C')
+    phiv_ext     = np.reshape(phiv_ext,    (Z,XBLOCK,XGRID),    order='C')
+    uh2o_ext     = np.reshape(uh2o_ext,    (Z,XBLOCK,XGRID),    order='C')
+    uo3_ext      = np.reshape(uo3_ext,     (Z,XBLOCK,XGRID),    order='C')
+    taup550_ext  = np.reshape(taup550_ext, (Z,XBLOCK,XGRID),    order='C')
+    pressure_ext = np.reshape(pressure_ext,(Z,XBLOCK,XGRID),    order='C')
+
+    (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, taup550_ext, pressure_ext, rtoa_ext,XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
+
+    # Output arrays reshaping \n",
+    rsurf_ext = np.reshape(rsurf_ext,(NB,GSIZEXT), order='C')
+    Jrtoa_ext = np.reshape(Jrtoa_ext,(NB,GSIZEXT), order='C')
+    Juo3_ext  = np.reshape(Juo3_ext, (NB,GSIZEXT), order='C')
+    Juh2o_ext = np.reshape(Juh2o_ext,(NB,GSIZEXT), order='C')
+    Jpre_ext  = np.reshape(Jpre_ext, (NB,GSIZEXT), order='C')
+    Jtaup_ext = np.reshape(Jtaup_ext,(NB,GSIZEXT), order='C')
+
+
+    rsurf  = np.zeros((NB,SIZE1,SIZE2))
+    Drsurf = np.zeros((NB,SIZE1,SIZE2))
+    inter  = np.zeros((SIZE1,SIZE2)) + np.nan
+    stock  = np.zeros((GSIZE))
+
+    BREAKPOINT = True
+    INPUT = False
+
+    if BREAKPOINT:
+        Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
+        Juo3   = np.zeros((NB,SIZE1,SIZE2))
+        Juh2o  = np.zeros((NB,SIZE1,SIZE2))
+        Jpre   = np.zeros((NB,SIZE1,SIZE2))
+        Jtaup  = np.zeros((NB,SIZE1,SIZE2))
+        Drtoa  = np.zeros((NB,SIZE1,SIZE2))
+        Duo3   = np.zeros((NB,SIZE1,SIZE2))
+        Duh2o  = np.zeros((NB,SIZE1,SIZE2))
+        Dpre   = np.zeros((NB,SIZE1,SIZE2))
+        Dtaup  = np.zeros((NB,SIZE1,SIZE2))
+
+    if INPUT:
+        Irtoa  = np.zeros((NB,SIZE1,SIZE2))
+        Iuo3   = np.zeros((SIZE1,SIZE2)) + np.nan
+        Iuh2o  = np.zeros((SIZE1,SIZE2)) + np.nan
+        Ipre   = np.zeros((SIZE1,SIZE2)) + np.nan
+        Itaup  = np.zeros((SIZE1,SIZE2)) + np.nan
+        Ialt   = np.zeros((SIZE1,SIZE2)) + np.nan
+        Iuo3[good]   = uo3
+        Iuh2o[good]  = uh2o
+        Ipre[good]   = pressure
+        Itaup[good]  = taup550
+        Ialt[good]   = alt
+
+    for i in range(NB):
+        inter[good]  = rsurf_ext[i,:GSIZE]
+        rsurf[i,:,:] = inter
+
+        if INPUT:
+            inter[good] = rtoa[i,:]
+            Irtoa[i,:,:]= inter
+
+        inter[good]  = abs(Jrtoa_ext[i,:GSIZE] * rtoa_err[i,:]               )
+        if BREAKPOINT: Drtoa[i,:,:] = inter
+        stock        = inter[good]**2
+        inter[good]  = abs(Jtaup_ext[i,:GSIZE] * (Etaup + ERtaup * taup550  ))
+        if BREAKPOINT: Dtaup[i,:,:] = inter
+        stock       += inter[good]**2
+        inter[good]  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
+        if BREAKPOINT: Duo3[i,:,:]  = inter
+        stock       += inter[good]**2
+        inter[good]  = abs(Juh2o_ext[i,:GSIZE] * (Euh2o + ERuh2o * uh2o     ))
+        if BREAKPOINT: Duh2o[i,:,:] = inter
+        stock       += inter[good]**2
+        inter[good]  = abs(Jpre_ext[i,:GSIZE] *  pressure_err)
+        if BREAKPOINT: Dpre[i,:,:]  = inter
+        stock       += inter[good]**2
+
+        inter[good]  = np.sqrt(stock/5.)
+        Drsurf[i,:,:]= inter
+
+        if BREAKPOINT:
+            inter[good]  = Jrtoa_ext[i,:GSIZE]
+            Jrtoa[i,:,:] = inter
+            inter[good]  = Juo3_ext[i,:GSIZE]
+            Juo3[i,:,:]  = inter
+            inter[good]  = Juh2o_ext[i,:GSIZE]
+            Juh2o[i,:,:] = inter
+            inter[good]  = Jpre_ext[i,:GSIZE]
+            Jpre[i,:,:]  = inter
+            inter[good]  = Jtaup_ext[i,:GSIZE]
+            Jtaup[i,:,:] = inter
+
+    del inter
+    del stock
+
+#    fileout = './test.h5'
+    save(fileout, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, BREAKPOINT, INPUT)
+
+
+if __name__=='__main__':
+    filein = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.nc'
+    fileout = '/rfs/proj/C3S/testdata/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.h5'
+    path_i = '/rfs/data/C3S'
+    path_o = '/rfs/proj/C3S/testdata'
+   
+    fdem = '/rfs/data/DEM/GTOPO30_DZ_MLUT.nc'
+    dem_lut = read_mlut(fdem)
+    S = Smacg()
+
+    for dirdate in glob('{}/*'.format(path_i)):
+        if basename(dirdate)[:4] == '2003':
+            for subdir in glob('{}/*'.format(dirdate)):
+                if exists(basename(subdir)):
+                    continue
+                for filein in glob('{}/*'.format(subdir)):
+                    print(filein)
+                    if filein[-3:] == '.nc':
+                        dirout = '{}/{}/{}'.format(path_o, basename(dirdate), basename(subdir))
+                        if not(exists(dirout)):
+                            system('mkdir -p {}'.format(dirout))
+                        fileout = '{}/{}.h5'.format(dirout, basename(filein)[:-3])
+                        if exists(fileout):
+                            continue
+                        print('{} => {}'.format(filein, fileout))
+                        main(filein, fileout, dem_lut, S)
+
+#    main(filein, fileout, dem_lut)
