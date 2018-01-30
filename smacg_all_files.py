@@ -6,7 +6,7 @@ from glob import glob
 import math
 import h5py
 from os.path import basename, exists, dirname
-from os import system
+from os import system, walk
 
 def pre_merra2(faero, fptwo):
     # Read MERRA2 ancillary data files and store all information into a MLUT object for further use
@@ -65,7 +65,7 @@ def pre_image(fname, aer_coef):
         sensor = 'VGT'
 
     # sensor switch
-    sensor = 'AVHRR/3' # forcage car l'attribut sensor n'existe pas toujours dans les images testdata
+#    sensor = 'AVHRR/3' # forcage car l'attribut sensor n'existe pas toujours dans les images testdata
     if sensor == 'AVHRR/3':
        conv = {'ch1':'b1','ch2':'b2','sun_zen':'SZA', 'sun_azi':'SAA','sat_zen':'VZA','sat_azi':'VAA'}
        xdataset.rename(conv, inplace=True)
@@ -98,28 +98,79 @@ def pre_image(fname, aer_coef):
        lon,lat=np.meshgrid(xdataset['Longitude'],xdataset['Latitude'])
        xdataset['lat']=(('x', 'y'), lat)
        xdataset['lon']=(('x', 'y'), lon)
-       # mean decimal time for the scene
-       try:
-           xdataset['mean-time']    = get_meantime(xdataset)
-       except:
-           time = basename(dirname(fname)).split('-')[3]
-           year = time[:4]
-           month = time[4:6]
-           day = time[6:8]
-           hour = time[8:10]
-           minute = time[10:12]
-           sec = time[12:]
-           if len(sec) == 1:
-               sec = '0{}'.format(sec)
-           xdataset['mean-time']  = np.datetime64(year + '-' + month + '-' + day + 'T' + hour + ':' + minute + ':' + sec)
-       xdataset['mean-time-dec']= date_to_float(xdataset['mean-time'].data)
+
        # scale ref
        for band in tab_band_internal:
            to_float(xdataset, band)
                                                        
-       return xdataset, SIZE1, SIZE2, tab_band_internal, smac_coeff_name
+    elif sensor=='VGT':
+        print(xdataset)
 
-def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, BREAKPOINT, INPUT):
+        ref = xdataset.segm_reference
+        if ref[:2] == 'V1':
+            sensor = 'VGT1'
+        else:
+            sensor = 'VGT2'
+
+        tab_band_internal = ['B0','B2','B3','MIR']
+        smac_coeff_name = ['coef_{}_{}_{}.dat'.format(sensor, str(x), aer_coef) for x in tab_band_internal]
+        SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
+
+        lon0, lat0, d_lon, d_lat = [float(x) for x in xdataset.map_info.split(',')[3:7]]
+        xdataset['Latitude'] = lat0 - np.arange(SIZE1)*d_lat
+        xdataset['Longitude'] = lon0 + np.arange(SIZE2)*d_lon
+
+        date_vgt = xdataset.segm_first_date
+        time_vgt = xdataset.segm_first_time
+        first_date = '{}T{}'.format(date_vgt, time_vgt)
+
+        date_vgt = xdataset.segm_last_date
+        time_vgt = xdataset.segm_last_time
+        last_date = '{}T{}'.format(date_vgt, time_vgt)
+        new_attrs = {'time_coverage_start':first_date, 'time_coverage_end':last_date}
+        xdataset = xdataset.assign_attrs(new_attrs)
+
+        clm = np.ones((SIZE1, SIZE2), dtype='int8')
+        sm = xdataset['SM'].data
+        clear = np.where((sm&1==0) & (sm&2==0) & (sm&4==0))
+        clm[clear] = 0
+        xdataset['clm'] = xarray.DataArray(clm, coords=[xdataset.Latitude, xdataset.Longitude], dims=['Latitude','Longitude'])
+
+        void = xarray.DataArray(np.zeros((SIZE1, SIZE2)) + np.NaN, coords=[xdataset.Latitude, xdataset.Longitude], dims=['Latitude','Longitude'])
+        for band in tab_band_internal:
+            to_float(xdataset, band)
+            bandunc = '{} uncertainty'.format(band)
+            to_float(xdataset, bandunc)
+            xdataset.rename({bandunc:'{}_unc'.format(band)}, inplace=True)
+
+        to_float(xdataset,'SAA')
+        to_float(xdataset,'SZA')
+        to_float(xdataset,'VAA')
+        to_float(xdataset,'VZA')
+
+        lon,lat=np.meshgrid(xdataset['Longitude'],xdataset['Latitude'])
+        xdataset['lat']=(('x', 'y'), lat)
+        xdataset['lon']=(('x', 'y'), lon)
+    # mean decimal time for the scene
+    try:
+        xdataset['mean-time']    = get_meantime(xdataset)
+    except:
+        time = basename(dirname(fname)).split('-')[3]
+        year = time[:4]
+        month = time[4:6]
+        day = time[6:8]
+        hour = time[8:10]
+        minute = time[10:12]
+        sec = time[12:]
+        if len(sec) == 1:
+            sec = '0{}'.format(sec)
+        xdataset['mean-time']  = np.datetime64(year + '-' + month + '-' + day + 'T' + hour + ':' + minute + ':' + sec)
+    xdataset['mean-time-dec']= date_to_float(xdataset['mean-time'].data)
+                                                       
+    return xdataset, SIZE1, SIZE2, tab_band_internal, smac_coeff_name
+
+def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT):
+
 #    rsurf  = np.zeros((NB,SIZE1,SIZE2))
 #    Drsurf = np.zeros((NB,SIZE1,SIZE2))
 #    inter  = np.zeros((SIZE1,SIZE2)) + np.nan
@@ -218,13 +269,13 @@ def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, BREAKPO
         out.create_dataset('Dpre', Dpre.shape, dtype='float32', compression='gzip', compression_opts=9)
         out.create_dataset('Dtaup', Dtaup.shape, dtype='float32', compression='gzip', compression_opts=9)
 
-#    if INPUT:
-#        out.create_dataset('rtoa', Irtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
-#        out.create_dataset('uo3',  Iuo3.shape, dtype='float32', compression='gzip', compression_opts=9)
-#        out.create_dataset('uh2o', Iuh2o.shape, dtype='float32', compression='gzip', compression_opts=9)
-#        out.create_dataset('pre', Ipre.shape, dtype='float32', compression='gzip', compression_opts=9)
-#        out.create_dataset('taup', Itaup.shape, dtype='float32', compression='gzip', compression_opts=9)
-#        out.create_dataset('alt', Ialt.shape, dtype='float32', compression='gzip', compression_opts=9)
+    if INPUT:
+        out.create_dataset('rtoa', Irtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('uo3',  Iuo3.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('uh2o', Iuh2o.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('pre', Ipre.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('taup', Itaup.shape, dtype='float32', compression='gzip', compression_opts=9)
+        out.create_dataset('alt', Ialt.shape, dtype='float32', compression='gzip', compression_opts=9)
 
     out['rtoc'][:]      = rsurf
     out['Drtoc'][:]     = Drsurf
@@ -290,8 +341,6 @@ def main(filein, fileout, dem_lut, S):
     if data is None:
         print("l'image n'a pas d'attributs")
         return
-
-
 
     year = str(data['mean-time'].values)[:4]
     month = str(data['mean-time'].values)[5:7]
@@ -412,7 +461,7 @@ def main(filein, fileout, dem_lut, S):
     stock  = np.zeros((GSIZE))
 
     BREAKPOINT = True
-    INPUT = False
+    INPUT = True
 
     if BREAKPOINT:
         Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
@@ -481,35 +530,47 @@ def main(filein, fileout, dem_lut, S):
     del inter
     del stock
 
-#    fileout = './test.h5'
-    save(fileout, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, BREAKPOINT, INPUT)
+    save(fileout, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT)
 
 
 if __name__=='__main__':
-    filein = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.nc'
-    fileout = '/rfs/proj/C3S/testdata/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.h5'
+#    filein = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.nc'
+#    fileout = '/rfs/proj/C3S/testdata/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.h5'
+    # avhrr
     path_i = '/rfs/data/C3S'
     path_o = '/rfs/proj/C3S/testdata'
+    # vgt
+    path_i = '/rfs/data/C3S/VGT/EXTRACT_V2/'
+    path_o = '/rfs/proj/C3S/testdata_VGT/'
+    # test VGT
+#    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/189_Gozo_V220050601037.h5'
+#    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/33_IMC_Oristano_V220050601036.h5'
+#    fileout = './test.h5'
    
     fdem = '/rfs/data/DEM/GTOPO30_DZ_MLUT.nc'
     dem_lut = read_mlut(fdem)
     S = Smacg()
 
-    for dirdate in glob('{}/*'.format(path_i)):
-        if basename(dirdate)[:4] == '2003':
-            for subdir in glob('{}/*'.format(dirdate)):
-                if exists(basename(subdir)):
-                    continue
-                for filein in glob('{}/*'.format(subdir)):
-                    print(filein)
-                    if filein[-3:] == '.nc':
-                        dirout = '{}/{}/{}'.format(path_o, basename(dirdate), basename(subdir))
-                        if not(exists(dirout)):
-                            system('mkdir -p {}'.format(dirout))
-                        fileout = '{}/{}.h5'.format(dirout, basename(filein)[:-3])
-                        if exists(fileout):
-                            continue
-                        print('{} => {}'.format(filein, fileout))
-                        main(filein, fileout, dem_lut, S)
+    for filein in glob('{}/*.h5'.format(path_i)):
+        fileout = '{}/{}'.format(path_o, basename(filein))
+        if exists(fileout):
+            continue
+        main(filein, fileout, dem_lut, S)
+#    for dirdate in glob('{}/*'.format(path_i)):
+#        if basename(dirdate)[:4] == '2003':
+#            for subdir in glob('{}/*'.format(dirdate)):
+#                if exists(basename(subdir)):
+#                    continue
+#                for filein in glob('{}/*'.format(subdir)):
+#                    print(filein)
+#                    if filein[-3:] == '.nc':
+#                        dirout = '{}/{}/{}'.format(path_o, basename(dirdate), basename(subdir))
+#                        if not(exists(dirout)):
+#                            system('mkdir -p {}'.format(dirout))
+#                        fileout = '{}/{}.h5'.format(dirout, basename(filein)[:-3])
+#                        if exists(fileout):
+#                            continue
+#                        print('{} => {}'.format(filein, fileout))
+#                        main(filein, fileout, dem_lut, S)
 
-#    main(filein, fileout, dem_lut)
+#    main(filein, fileout, dem_lut, S)
