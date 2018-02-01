@@ -260,7 +260,6 @@ class Smacg(object):
         NBAND = coeffs.size
 
         shp = rtoa.shape
-        print(shp)
         assert shp[0] == NBAND
         if (rtoa.ndim == 4) :
             NZ  = shp[1]

@@ -104,7 +104,6 @@ def pre_image(fname, aer_coef):
            to_float(xdataset, band)
                                                        
     elif sensor=='VGT':
-        print(xdataset)
 
         ref = xdataset.segm_reference
         if ref[:2] == 'V1':
@@ -540,8 +539,11 @@ if __name__=='__main__':
     path_i = '/rfs/data/C3S'
     path_o = '/rfs/proj/C3S/testdata'
     # vgt
-    path_i = '/rfs/data/C3S/VGT/EXTRACT_V2/'
-    path_o = '/rfs/proj/C3S/testdata_VGT/'
+#    path_i = '/rfs/data/C3S/VGT/EXTRACT_V2/'
+#    path_o = '/rfs/proj/C3S/testdata_VGT/'
+    path_i = '/rfs/data/VGT/VGTP_extracts_49x49_180129'
+    path_o = '/rfs/proj/C3S/VGTP_extracts_49x49_lev2'
+    year = 1999
     # test VGT
 #    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/189_Gozo_V220050601037.h5'
 #    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/33_IMC_Oristano_V220050601036.h5'
@@ -551,8 +553,12 @@ if __name__=='__main__':
     dem_lut = read_mlut(fdem)
     S = Smacg()
 
-    for filein in glob('{}/*.h5'.format(path_i)):
-        fileout = '{}/{}'.format(path_o, basename(filein))
+    for filein in glob('{}/{}/*/*.h5'.format(path_i,year)):
+        print(filein)
+        dirout = '{}/{}/{}'.format(path_o, year, basename(dirname(filein)))
+        if not(exists(dirout)):
+            system('mkdir -p {}'.format(dirout))
+        fileout = '{}/{}'.format(dirout, basename(filein))
         if exists(fileout):
             continue
         main(filein, fileout, dem_lut, S)
