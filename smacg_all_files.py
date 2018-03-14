@@ -7,6 +7,8 @@ import math
 import h5py
 from os.path import basename, exists, dirname
 from os import system, walk
+from netCDF4 import Dataset
+from scipy.interpolate import RectBivariateSpline
 
 def pre_merra2(faero, fptwo):
     # Read MERRA2 ancillary data files and store all information into a MLUT object for further use
@@ -39,6 +41,20 @@ def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):
     return (d - epoch).astype(np.float64)/1.0e9/60.
 
 def pre_image(fname, aer_coef):
+
+    def VGT_TIE_COMPLETE(dataset, a, size, tie):
+        XSIZE, YSIZE = size
+        XTIE, YTIE = tie
+        ref = dataset[a] * float(dataset[a].attrs['Scale']) + float(dataset[a].attrs['Offset'])
+        r1 = np.arange(0, XSIZE, XSIZE/XTIE)
+        r2 = np.arange(0, YSIZE, YSIZE/YTIE)
+        r11,r22 = np.meshgird(np.arange(XSIZE), np.arange(YSIZE))
+        res = RectBivariateSpline(r1, r2, ref).ev(r11, r22)
+        res = np.swapaxes(res, 0, 1)
+        res = xarray.DataArray(res ,dims = ('phony_dim_0','phony_dim_0'))
+
+        dataset.drop(a)
+        dataset[a] = res
 
     def get_meantime(dataset):
         time = dataset.time_coverage_start
@@ -139,13 +155,25 @@ def pre_image(fname, aer_coef):
         for band in tab_band_internal:
             to_float(xdataset, band)
             bandunc = '{} uncertainty'.format(band)
-            to_float(xdataset, bandunc)
+            if  bandunc in xdataset.data_vars.keys():
+                to_float(xdataset, bandunc)
+            else:
+                void = xarray.DataArray(np.zeros((SIZE1, SIZE2)) + np.NaN, coords=[xdataset.Latitude, xdataset.Longitude], dims=['Latitude','Longitude'])
+                xdataset[bandunc] = void
+
             xdataset.rename({bandunc:'{}_unc'.format(band)}, inplace=True)
 
-        to_float(xdataset,'SAA')
-        to_float(xdataset,'SZA')
-        to_float(xdataset,'VAA')
-        to_float(xdataset,'VZA')
+
+        if XTIE == SIZE1:
+            to_float(xdataset,'SAA')
+            to_float(xdataset,'SZA')
+            to_float(xdataset,'VAA')
+            to_float(xdataset,'VZA')
+        else:
+            VGT_TIE_COMPLETE(xdataset, 'SZA', (SIZE1,SIZE2), (XTIE,YTIE))
+            VGT_TIE_COMPLETE(xdataset, 'SAA', (SIZE1,SIZE2), (XTIE,YTIE))
+            VGT_TIE_COMPLETE(xdataset, 'VZA', (SIZE1,SIZE2), (XTIE,YTIE))
+            VGT_TIE_COMPLETE(xdataset, 'VAA', (SIZE1,SIZE2), (XTIE,YTIE))
 
         lon,lat=np.meshgrid(xdataset['Longitude'],xdataset['Latitude'])
         xdataset['lat']=(('x', 'y'), lat)
@@ -168,98 +196,54 @@ def pre_image(fname, aer_coef):
                                                        
     return xdataset, SIZE1, SIZE2, tab_band_internal, smac_coeff_name
 
-def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT):
+def save_h5(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT, version):
 
-#    rsurf  = np.zeros((NB,SIZE1,SIZE2))
-#    Drsurf = np.zeros((NB,SIZE1,SIZE2))
-#    inter  = np.zeros((SIZE1,SIZE2)) + np.nan
-#    stock  = np.zeros((GSIZE))
-
-#    BREAKPOINT = False
-#    INPUT = False
-#
-#    if BREAKPOINT:
-#        Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
-#        Juo3   = np.zeros((NB,SIZE1,SIZE2))
-#        Juh2o  = np.zeros((NB,SIZE1,SIZE2))
-#        Jpre   = np.zeros((NB,SIZE1,SIZE2))
-#        Jtaup  = np.zeros((NB,SIZE1,SIZE2))
-#        Drtoa  = np.zeros((NB,SIZE1,SIZE2))
-#        Duo3   = np.zeros((NB,SIZE1,SIZE2))
-#        Duh2o  = np.zeros((NB,SIZE1,SIZE2))
-#        Dpre   = np.zeros((NB,SIZE1,SIZE2))
-#        Dtaup  = np.zeros((NB,SIZE1,SIZE2))
-#
-#    if INPUT:
-#        Irtoa  = np.zeros((NB,SIZE1,SIZE2))
-#        Iuo3   = np.zeros((SIZE1,SIZE2)) + np.nan
-#        Iuh2o  = np.zeros((SIZE1,SIZE2)) + np.nan
-#        Ipre   = np.zeros((SIZE1,SIZE2)) + np.nan
-#        Itaup  = np.zeros((SIZE1,SIZE2)) + np.nan
-#        Ialt   = np.zeros((SIZE1,SIZE2)) + np.nan
-#        Iuo3[good]   = uo3
-#        Iuh2o[good]  = uh2o
-#        Ipre[good]   = pressure
-#        Itaup[good]  = taup550
-#        Ialt[good]   = alt
-
-#    for i in range(NB):
-#        inter[good]  = rsurf_ext[i,:GSIZE]
-#        rsurf[i,:,:] = inter
-#
-#        if INPUT:
-#            inter[good] = rtoa[i,:]
-#            Irtoa[i,:,:]= inter
-#
-#        inter[good]  = abs(Jrtoa_ext[i,:GSIZE] * rtoa_err[i,:]               )
-#        if BREAKPOINT: Drtoa[i,:,:] = inter
-#        stock        = inter[good]**2
-#        inter[good]  = abs(Jtaup_ext[i,:GSIZE] * (Etaup + ERtaup * taup550  ))
-#        if BREAKPOINT: Dtaup[i,:,:] = inter
-#        stock       += inter[good]**2
-#        inter[good]  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
-#        if BREAKPOINT: Duo3[i,:,:]  = inter
-#        stock       += inter[good]**2
-#        inter[good]  = abs(Juh2o_ext[i,:GSIZE] * (Euh2o + ERuh2o * uh2o     ))
-#        if BREAKPOINT: Duh2o[i,:,:] = inter
-#        stock       += inter[good]**2
-#        inter[good]  = abs(Jpre_ext[i,:GSIZE] *  pressure_err)
-#        if BREAKPOINT: Dpre[i,:,:]  = inter
-#        stock       += inter[good]**2
-#
-#        inter[good]  = np.sqrt(stock/5.)
-#        Drsurf[i,:,:]= inter
-#
-#        if BREAKPOINT:
-#            inter[good]  = Jrtoa_ext[i,:GSIZE]
-#            Jrtoa[i,:,:] = inter
-#            inter[good]  = Juo3_ext[i,:GSIZE]
-#            Juo3[i,:,:]  = inter
-#            inter[good]  = Juh2o_ext[i,:GSIZE]
-#            Juh2o[i,:,:] = inter
-#            inter[good]  = Jpre_ext[i,:GSIZE]
-#            Jpre[i,:,:]  = inter
-#            inter[good]  = Jtaup_ext[i,:GSIZE]
-#            Jtaup[i,:,:] = inter
-#
-#        del inter
-#        del stock
+    size = rsurf[0].shape
 
     out = h5py.File(filename, 'a')
 
     for att, value in data.attrs.items():
         out.attrs[att] = value
+    out.attrs['date_created'] = str(datetime.now())
+    out.attrs['production_center'] = 'hygeos'
+    out.attrs['version'] = version
 
-    out.create_dataset('Latitude', data['Latitude'].shape, dtype='float32', compression='gzip', compression_opts=9)
+    dataset_names = ['TOC Bleu', 'TOC Red', 'TOC NIR', 'TOC SWIR']
+    for idx in range(4):
+        band = dataset_names[idx]
+        out.create_dataset(band, size, dtype='float32', compression='gzip', compression_opts=9)
+        out[band].attrs['Long_name'] = 'Top of Canopy Reflectance'
+        out[band].attrs['Unit'] = 'None'
+        out[band][:] = rsurf[idx]
+        band = '{} error'.format(band)
+        out.create_dataset(band, size, dtype='float32', compression='gzip', compression_opts=9)
+        out[band].attrs['Long_name'] = 'Uncertainty Top of Canopy Reflectance'
+        out[band].attrs['Unit'] = 'None'
+        out[band][:] = Drsurf[idx]
+
+    lon, lat = np.meshgrid(data['Longitude'].data, data['Latitude'].data)
+    out.create_dataset('Lat', size, dtype='float32', compression='gzip', compression_opts=9)
     out['Latitude'].attrs['Unit'] = 'degree'
-    out.create_dataset('Longitude', data['Longitude'].shape, dtype='float32', compression='gzip', compression_opts=9)
+    out['Latitude'][:] = lat
+    out.create_dataset('Lon', size, dtype='float32', compression='gzip', compression_opts=9)
     out['Longitude'].attrs['Unit'] = 'degree'
-    out.create_dataset('rtoc', rsurf.shape, dtype='float32', compression='gzip', compression_opts=9)
-    out['rtoc'].attrs['long_name'] = 'Top of Canopy Reflectance'
-    out['rtoc'].attrs['unit'] = 'None'
-    out.create_dataset('Drtoc', Drsurf.shape, dtype='float32', compression='gzip', compression_opts=9)
-    out['Drtoc'].attrs['long_name'] = 'Uncertainty Top of Canopy Reflectance'
-    out['Drtoc'].attrs['unit'] = 'None'
+    out['Lontitude'][:] = lon
+
+    out.create_dataset('SZA', size, dtype='float32', compression='gzip', compression_opts=9)
+    out['SZA'].attrs['Unit'] = 'degree'
+    out['SZA'][:] = data['SZA'].data
+    out.create_dataset('SAA', size, dtype='float32', compression='gzip', compression_opts=9)
+    out['SAA'].attrs['Unit'] = 'degree'
+    out['SAA'][:] = data['SAA'].data
+    out.create_dataset('VZA', size, dtype='float32', compression='gzip', compression_opts=9)
+    out['VZA'].attrs['Unit'] = 'degree'
+    out['VZA'][:] = data['VZA'].data
+    out.create_dataset('VAA', size, dtype='float32', compression='gzip', compression_opts=9)
+    out['VAA'].attrs['Unit'] = 'degree'
+    out['VAA'][:] = data['VAA'].data
+
+    out.create_dataset('SM', size, dtype='float32', compression='gzip', compression_opts=9)
+    out['SM'][:] = data['SM'].data
 
     if BREAKPOINT:
         out.create_dataset('Drtoa', Drtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
@@ -276,10 +260,6 @@ def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, 
         out.create_dataset('taup', Itaup.shape, dtype='float32', compression='gzip', compression_opts=9)
         out.create_dataset('alt', Ialt.shape, dtype='float32', compression='gzip', compression_opts=9)
 
-    out['rtoc'][:]      = rsurf
-    out['Drtoc'][:]     = Drsurf
-    out['Latitude'][:]  = data['Latitude'].data
-    out['Longitude'][:] = data['Longitude'].data
 
     if BREAKPOINT:
         out['Drtoa'][:] = Drtoa
@@ -298,6 +278,61 @@ def save(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, 
 
     out.close()
 
+def save_nc(filename, data, rsurf, Drsurf, version):
+    size = rsurf[0].shape
+
+    out = Dataset(filename, 'w', format='NETCDF4')
+
+    for att, value in data.attrs.items():
+        out.setncattr(att, value)
+
+    out.date_created = str(datetime.now())
+    out.production_center = 'hygeos'
+    out.version = version
+
+    width = size[0]
+    height = size[1]
+    h = out.createDimension('height', height)
+    w = out.createDimension('width', width)
+
+    dataset_names = ['TOC Blue', 'TOC Red', 'TOC NIR', 'TOC SWIR']
+    for idx in range(4):
+        band = dataset_names[idx]
+        sds = out.createVariable(band, 'f', ('height','width'), complevel=9)
+        sds[:] = rsurf[idx]
+        sds.Long_name = 'Top of Canopy Reflectance'
+        sds.Unit = 'None'
+        band = '{} error'.format(band)
+        sds = out.createVariable(band, 'f', ('height','width'), complevel=9)
+        sds[:] = Drsurf[idx]
+        sds.Long_name = 'Uncertainty Top of Canopy Reflectance'
+        sds.Unit = 'None'
+
+    lon, lat = np.meshgrid(data['Longitude'].data, data['Latitude'].data)
+    sds = out.createVariable('Lat', 'f', ('height','width'), complevel=9)
+    sds[:] = lat
+    sds.Unit = 'Degree'
+    sds = out.createVariable('Lon', 'f', ('height', 'width'), complevel=9)
+    sds[:] = lon
+    sds.Unit = 'Degree'
+
+    sds = out.createVariable('SZA', 'f', ('height', 'width'), complevel=9)
+    sds[:] = data['SZA'].data
+    sds.Unit = 'Degree'
+    sds = out.createVariable('SAA', 'f', ('height', 'width'), complevel=9)
+    sds[:] = data['SAA'].data
+    sds.Unit = 'Degree'
+    sds = out.createVariable('VZA', 'f', ('height', 'width'), complevel=9)
+    sds[:] = data['VZA'].data
+    sds.Unit = 'Degree'
+    sds = out.createVariable('VAA', 'f', ('height', 'width'), complevel=9)
+    sds[:] = data['VAA'].data
+    sds.Unit = 'Degree'
+
+    sds = out.createVariable('SM', 'f', ('height', 'width'), complevel=9)
+    sds[:] = data['SM'].data
+
+    out.close()
 
 def main(filein, fileout, dem_lut, S):
 
@@ -459,8 +494,8 @@ def main(filein, fileout, dem_lut, S):
     inter  = np.zeros((SIZE1,SIZE2)) + np.nan
     stock  = np.zeros((GSIZE))
 
-    BREAKPOINT = True
-    INPUT = True
+    BREAKPOINT = False
+    INPUT = False
 
     if BREAKPOINT:
         Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
@@ -529,12 +564,16 @@ def main(filein, fileout, dem_lut, S):
     del inter
     del stock
 
-    save(fileout, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT)
+    if fileout.split('.')[-1] == 'h5':
+        save_h5(fileout, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irtoa, Iuo3, Iuh2o, Ipre, Itaup, Ialt, BREAKPOINT, INPUT, version)
+    elif fileout.split('.')[-1] == 'nc':
+        save_nc(fileout, data, rsurf, Drsurf, version)
 
 
 if __name__=='__main__':
 #    filein = '/rfs/data/C3S/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.nc'
 #    fileout = '/rfs/proj/C3S/testdata/2003_2/C3S-L1B-AVHRR_NOAA-20030719130848-fv0001.nc/testdata_Efri-Vik_Iceland.h5'
+    typeout = 'netcdf4' #'hdf5'
     # avhrr
     path_i = '/rfs/data/C3S'
     path_o = '/rfs/proj/C3S/testdata'
@@ -558,7 +597,10 @@ if __name__=='__main__':
         dirout = '{}/{}/{}'.format(path_o, year, basename(dirname(filein)))
         if not(exists(dirout)):
             system('mkdir -p {}'.format(dirout))
-        fileout = '{}/{}'.format(dirout, basename(filein))
+        if typeout == 'hdf5':
+            fileout = '{}/{}'.format(dirout, basename(filein))
+        else:
+            fileout = '{}/{}.nc'.format(dirout, basename(filein)[:-3])
         if exists(fileout):
             continue
         main(filein, fileout, dem_lut, S)
