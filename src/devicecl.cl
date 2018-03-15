@@ -2,8 +2,8 @@
 
 __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
-                     __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, __global float *Jtaup) 
-//, int NBLOOPd, int XGRIDd, int XBLOCKd, int NBANDd, int NZd)
+                     __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, __global float *Jtaup 
+                    , int NBLOOPd, int NBANDd, int NZd)
  
 {
 int gid0 = get_global_id(0);
@@ -17,11 +17,11 @@ int gs1 = get_global_size(1);
 //*/
 // current thread iudex
 //const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-const int XXBLOCKd=64;
-const int XXGRIDd=64;
-const int XNBLOOPd=1;
-const int XNZd=1;
-const int XNBANDd=4;
+const int XXBLOCKd=gs0;
+const int XXGRIDd=gs1;
+const int XNBLOOPd=NBLOOPd;
+const int XNZd=NZd;
+const int XNBANDd=NBANDd;
 
 const int idx = gid0 * gs1 + gid1;
 const int NRUN=3 + XNBLOOPd; // number of run necessary to compute some Jacobians with finite difference (here 2 Jacobians)
@@ -55,7 +55,7 @@ float Peq ;
 float Res_ray, Res_aer, Res_6s;
 float ray_phase, ray_ref, aer_ref, aer_phase ;
 
-if (gid0==0) printf("1.. Processing smaccl !!!!  %08d %08d %08d %08d %08d %08d\n", XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd,M);
+//if (gid0==0) printf("1.. Processing smaccl !!!!  %08d %08d %08d %08d %08d %08d\n", XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd,M);
 // loop on the 3rd dimension (remaining pixels)
 for (int ip=0; ip<XNZd; ip++) {
 
@@ -68,8 +68,8 @@ for (int ib=0; ib<XNBANDd; ib++) {
 //
 unsigned long int ii = idx + ip*M + ib*M*XNZd;
 unsigned long int jj = idx + ip*M;
-if (gid0==0) {printf("2.. Processing smaccl !!!!  %08d %08d %08d %08d %08d %08d\n", XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd,M);
-             printf("... %08d %08d %08d %08d %08d\n", ii, jj, idx, ip, ib);}
+//if (gid0==0) {printf("2.. Processing smaccl !!!!  %08d %08d %08d %08d %08d %08d\n", XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd,M);
+//             printf("... %08d %08d %08d %08d %08d\n", ii, jj, idx, ip, ib);}
 //if (gid0<3) printf("... Processing smaccl !!!! %08d %08d %08d %08d %08d %08d %08d %08d %08d %08d %08d\n", ii, jj, idx, ip, ib, M, XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd);
 float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
 float taup550=taup550_[jj], pression=pression_[jj], rtoa=rtoa_[ii];

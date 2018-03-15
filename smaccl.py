@@ -194,46 +194,50 @@ def dPsdz(z,p0,T, g=9.801, R=287.058, lam=-0.006):
 
 class Smaccl(object):
 
-    def __init__(self):
+    def __init__(self, platform='GPU'):
 
-        print("....  testsmaccl1 class __init__ ")
+#        print("....  testsmaccl1 class __init__ ")
 
         if exists(src_device):
 
-            print("....  testsmaccl1 class __init__ exists source")
+            #            print("....  testsmaccl1 class __init__ exists source")
             
-            print ('... Obtain an OpenCL platform')
-            ####Set the environment variable PYOPENCL_CTX='0' to avoid being asked again.
-            ## Step #1. Obtain an OpenCL platform.
-            self.clplatform = cl.get_platforms()[0]
-            
-            print(self.clplatform)
-            
-            ## It would be necessary to add some code to check the check the support for
-            ## the necessary platform extensions with platform.extensions
-            
-            print ('... Obtain a device id')
-            ## Step #2. Obtain a device id for at least one device (accelerator).
-            self.cldevice = self.clplatform.get_devices()[1]
-            
-            print(self.cldevice)
-            ## It would be necessary to add some code to check the check the support for
-            ## the necessary device extensions with device.extensions
-            print ('... Create a context for the selected device')
-            ## Step #3. Create a context for the selected device.
-            self.clcontext = cl.Context([self.cldevice])
-            print(self.clcontext)
+#            print ('... Obtain an OpenCL platform')
+#            ####Set the environment variable PYOPENCL_CTX='0' to avoid being asked again.
+#            ## Step #1. Obtain an OpenCL platform.
+#            self.clplatform = cl.get_platforms()[1]
+#            
+#            
+#            ## It would be necessary to add some code to check the check the support for
+#            ## the necessary platform extensions with platform.extensions
+#            
+#            print ('... Obtain a device id')
+#            ## Step #2. Obtain a device id for at least one device (accelerator).
+#            self.cldevice = self.clplatform.get_devices()[0]
+#            
+#            print(self.cldevice)
+#            ## It would be necessary to add some code to check the check the support for
+#            ## the necessary device extensions with device.extensions
+#            print ('... Create a context for the selected device')
+#            ## Step #3. Create a context for the selected device.
+#            self.clcontext = cl.Context([self.cldevice])
+#            print(self.clcontext)
             # set up directories
-            print ('... Get a queue')
+#            print ('... Get a queue')
             #self.clqueue = cl.CommandQueue(self.clcontext)
-            self.clqueue = cl.CommandQueue(self.clcontext, properties=cl.command_queue_properties.PROFILING_ENABLE)
+#            self.clqueue = cl.CommandQueue(self.clcontext, properties=cl.command_queue_properties.PROFILING_ENABLE)
+            status = self.set_queue(platform)
+            if not(status):
+                raise IOError('all devices busying')
+
+            print(self.cldevice, " ; ", self.cldevice.version, " ; ", self.cldevice.driver_version)
             # load devicecl.cl
             programFile = open(src_device, 'r')
             programText = programFile.read()
             program     = cl.Program(self.clcontext, programText)
             programFile.close()
             
-            print ('... Build program')
+#            print ('... Build program')
             try:
                 program.build()
             except:
@@ -241,7 +245,7 @@ class Smaccl(object):
                 print(program.get_build_info(self.cldevice, cl.program_build_info.LOG))
                 raise
 
-            print ('... Load Kernel')
+#            print ('... Load Kernel')
             # load the kernel
             self.kernel = cl.Kernel(program, 'smaccl')
             
@@ -291,7 +295,7 @@ class Smaccl(object):
                 uh2o, uo3, taup550, pression, rtoa,
                 XBLOCK=128, XGRID=128, NBLOOP=1):
 
-        print("....  testsmaccl1 class run ")
+#        print("....  testsmaccl1 class run ")
         
         '''
         Run an atmospheric correction run using SMAC
@@ -378,39 +382,8 @@ class Smaccl(object):
         clpression = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=pression)
         clrtoa     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=rtoa)
         
-        data_points = XBLOCK * XGRID * NBAND * NZ # ~8 million data points, ~32 MB data
-        workers     = 2**8 # 256 workers, play with this to see performance differences
-               # eg: 2**0 => 1 worker will be non-parallel execution on gpu
-               # data points must be a multiple of workers
-               
-        workers     = 32 
-        global_size=(data_points,)
-        local_size=(workers,)
-#        preferred_multiple = self.kernel.get_work_group_info( \
-#            cl.kernel_work_group_info.PREFERRED_WORK_GROUP_SIZE_MULTIPLE, \
-#            self.cldevice)
-        
-               
-        print("Data points:", data_points)
-        print("Workers:", workers)
-#        print("Preferred work group size multiple:", preferred_multiple)
+#        print(".... Smaccl: Smaccl  kernel (run) begin  ")
 
-#        if (workers % preferred_multiple):
-#            print("Number of workers not a preferred multiple (%d*N)." \
-#                    % (preferred_multiple))
-#            print("Performance may be reduced.")
-        
-        print(".... Smaccl: Smaccl  kernel (run) begin  ")
-
-        global_size=(XBLOCK * XGRID * NBAND * NZ,)
-        local_size = (XBLOCK * XGRID * NBAND,)
-        
-        local_size = (XBLOCK * XGRID * NBAND,)
-        local_size = (XBLOCK,)
-        print("Global size:", global_size)
-        print("Local  size:", local_size)
-        print(shp[2], shp[3])
-        
         exec_evt = self.kernel(self.clqueue, (shp[2],shp[3]), None, 
         clcoeffs, 
         cltetas , 
@@ -427,77 +400,40 @@ class Smaccl(object):
         Juo3d,
         Juh2od,
         Jpred,
-        Jtaupd
+        Jtaupd,
+        np.int32(NBLOOP),
+        np.int32(NBAND),
+        np.int32(NZ)
         )
-        #np.int32(NBLOOP),
-        #np.int32(XGRID),
-        #np.int32(XBLOCK),
-        #np.int32(NBAND),
-        #np.int32(NZ)
-        #)
         
-        exec_evt.wait()
-        elapsed = 1e-9*(exec_evt.profile.end - exec_evt.profile.start)
-
         cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
         cl.enqueue_copy(self.clqueue, Jrtoa, Jrtoad)
         cl.enqueue_copy(self.clqueue, Juo3, Juo3d)
         cl.enqueue_copy(self.clqueue, Juh2o, Juh2od)
         cl.enqueue_copy(self.clqueue, Jpre, Jpred)
         cl.enqueue_copy(self.clqueue, Jtaup, Jtaupd)
-        print("Execution time of test: %g s" % elapsed)
-        
-        '''
-        rsurf  = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        Jrtoad = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        Juo3d  = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        Juh2od = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        Jpred  = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        Jtaupd = np.zeros((NBAND, 1, YSIZE, XSIZE), dtype='float32', order='C')
-        '''
-        '''
-        rsurfd = np.empty_like(rtoa)
-        Jrtoad = np.empty_like(rtoa)
-        Juo3d  = np.empty_like(rtoa)
-        Juh2od = np.empty_like(rtoa)
-        Jpred  = np.empty_like(rtoa)
-        Jtaupd = np.empty_like(rtoa)
-        '''
-        '''
-        print (rsurfd.shape)
-        
-        print ('------------------------------------')
-        print (rsurf)
-        print ('------------------------------------')
-        print (rsurfd)
-        print ('------------------------------------')
-        '''
-        '''
-        print ('1')
-        cl.enqueue_read_buffer(self.clqueue, rsurf, rsurfd).wait()
-        print ('2')
-        cl.enqueue_read_buffer(self.clqueue, Jrtoa, Jrtoad).wait()
-        print ('3')
-        cl.enqueue_read_buffer(self.clqueue, Juo3,  Juo3d).wait()
-        print ('4')
-        cl.enqueue_read_buffer(self.clqueue, Juh2o, Juh2od).wait()
-        print ('5')
-        cl.enqueue_read_buffer(self.clqueue, Jpre,  Jpred).wait()
-        print ('6')
-        cl.enqueue_read_buffer(self.clqueue, Jtaup, Jtaupd).wait()
-        print ('7')
-        '''
-        '''
-        print ('1')
-        cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
-        print ('2')
-        '''
-                
-        #except Exception as e:
-        #    print str(e)
-        #    traceback.print_exc()
-        #    raise
  
-        print(".... Smaccl: Smaccl  kernel (run) end  ")
+#        print(".... Smaccl: Smaccl  kernel (run) end  ")
         
         return ( rsurf, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
+
+    def set_queue(self, xpu='GPU'):
+        typedevice = {'CPU':'Portable Computing Language','GPU':'NVIDIA CUDA'}
+        platforms = cl.get_platforms()
+        for plat in platforms:
+            if typedevice[xpu] == plat.name:
+                devices = plat.get_devices()
+                for device in devices:
+                    try:
+                        self.cldevice = device
+                        self.clcontext = cl.Context([device])
+                        self.clqueue = cl.CommandQueue(self.clcontext)
+
+                        return True
+                    except:
+                        pass
+
+        print('all devices busying')
+        return False
+
+
