@@ -9,6 +9,7 @@ from os.path import basename, exists, dirname
 from os import system, walk
 from netCDF4 import Dataset
 from scipy.interpolate import RectBivariateSpline
+from datetime import datetime
 
 def pre_merra2(faero, fptwo):
     # Read MERRA2 ancillary data files and store all information into a MLUT object for further use
@@ -71,6 +72,7 @@ def pre_image(fname, aer_coef):
 
     try:
         xdataset = xarray.open_dataset(fname)
+        print(xdataset)
     except:
        return None, None, None, None, None
         
@@ -80,19 +82,23 @@ def pre_image(fname, aer_coef):
     except:
         sensor = 'VGT'
 
+    if sensor=='VEGETATION':
+        sensor = 'VGT'
+
     # sensor switch
 #    sensor = 'AVHRR/3' # forcage car l'attribut sensor n'existe pas toujours dans les images testdata
-    if sensor == 'AVHRR/3':
+    if sensor == 'AVHRR/3' or sensor == 'AVHRR/2':
        conv = {'ch1':'b1','ch2':'b2','sun_zen':'SZA', 'sun_azi':'SAA','sat_zen':'VZA','sat_azi':'VAA'}
        xdataset.rename(conv, inplace=True)
        tab_band_internal = ['b1','b2']
        smac_coeff_name = ['NIR', 'VIS']
 
 #       if 'avhrr_b3a' in xdataset.data_vars.keys():
-#           tab_band_internal.append('b3a')
-#           conv = {'avhrr_b3a':'b3a'}
-#           xdataset.rename(conv, inplace=True)
-#           smac_coeff_name.append('MIR')
+       if 'ch3a' in xdataset.data_vars.keys() and exists('./COEFFS/coef_NOAA09_MIR_CONT.dat'):
+           tab_band_internal.append('b3a')
+           conv = {'ch3a':'b3a'}
+           xdataset.rename(conv, inplace=True)
+           smac_coeff_name.append('MIR')
 
        SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
 
@@ -106,7 +112,9 @@ def pre_image(fname, aer_coef):
            xdataset[band] = xdataset[band].assign_attrs(new_attrs)
 
        try: 
-           platform = xdataset.platform.replace('-','')
+#           platform = xdataset.platform.replace('-','')
+            dummy = xdataset.platform.split('-')
+            platform = '{}{:02d}'.format(dummy[0], int(dummy[1]))
        except:
            return None, None, None, None, None
        smac_coeff_name = ['coef_{}_{}_{}.dat'.format(platform, x, aer_coef) for x in smac_coeff_name]
@@ -121,7 +129,11 @@ def pre_image(fname, aer_coef):
                                                        
     elif sensor=='VGT':
 
-        ref = xdataset.segm_reference
+        if 'segm_reference' in xdataset.__dict__:
+            ref = xdataset.segm_reference
+        else:
+            ref = xdataset.SEGM_REFERENCE
+
         if ref[:2] == 'V1':
             sensor = 'VGT1'
         else:
@@ -243,7 +255,8 @@ def save_h5(filename, data, rsurf, Drsurf, Drtoa, Duo3, Duh2o, Dpre, Dtaup, Irto
     out['VAA'][:] = data['VAA'].data
 
     out.create_dataset('SM', size, dtype='float32', compression='gzip', compression_opts=9)
-    out['SM'][:] = data['SM'].data
+#    out['SM'][:] = data['SM'].data
+    out['SM'][:] = data['clm'].data
 
     if BREAKPOINT:
         out.create_dataset('Drtoa', Drtoa.shape, dtype='float32', compression='gzip', compression_opts=9)
@@ -296,7 +309,9 @@ def save_nc(filename, data, rsurf, Drsurf, version):
     w = out.createDimension('width', width)
 
     dataset_names = ['TOC Blue', 'TOC Red', 'TOC NIR', 'TOC SWIR']
-    for idx in range(4):
+    print(rsurf.shape)
+#    for idx in range(4):
+    for idx in range(rsurf.shape[0]):
         band = dataset_names[idx]
         sds = out.createVariable(band, 'f', ('height','width'), complevel=9)
         sds[:] = rsurf[idx]
@@ -330,7 +345,8 @@ def save_nc(filename, data, rsurf, Drsurf, version):
     sds.Unit = 'Degree'
 
     sds = out.createVariable('SM', 'f', ('height', 'width'), complevel=9)
-    sds[:] = data['SM'].data
+#    sds[:] = data['SM'].data
+    sds[:] = data['clm'].data
 
     out.close()
 
@@ -582,17 +598,25 @@ if __name__=='__main__':
 #    path_o = '/rfs/proj/C3S/testdata_VGT/'
     path_i = '/rfs/data/VGT/VGTP_extracts_49x49_180129'
     path_o = '/rfs/proj/C3S/VGTP_extracts_49x49_lev2'
-    year = 1999
+
+    path_i = '/rfs/data/AVHRR/group2'
+    path_o = '/rfs/proj/C3S/AVHRR_group2_lev2'
+
+    path_i = '/rfs/data/C3S/C3S_312a_Lot9/L2B_VGT_AERONET'
+    path_o = '/rfs/user/bruno/C3S/test'
+    year = 2002
     # test VGT
 #    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/189_Gozo_V220050601037.h5'
 #    filein = '/rfs/data/C3S/VGT/EXTRACT_V2/33_IMC_Oristano_V220050601036.h5'
 #    fileout = './test.h5'
    
-    fdem = '/rfs/data/DEM/GTOPO30_DZ_MLUT.nc'
+    fdem = '/rfs/data/DEM/GLOBE/GTOPO30_DZ_MLUT.nc'
     dem_lut = read_mlut(fdem)
     S = Smacg()
 
-    for filein in glob('{}/{}/*/*.h5'.format(path_i,year)):
+    files = glob('{}/{}/*/*.nc'.format(path_i,year))
+#    for filein in glob('{}/{}/*/*.h5'.format(path_i,year)):
+    for filein in files:
         print(filein)
         dirout = '{}/{}/{}'.format(path_o, year, basename(dirname(filein)))
         if not(exists(dirout)):
@@ -602,8 +626,10 @@ if __name__=='__main__':
         else:
             fileout = '{}/{}.nc'.format(dirout, basename(filein)[:-3])
         if exists(fileout):
+            print("skip")
             continue
         main(filein, fileout, dem_lut, S)
+        break
 #    for dirdate in glob('{}/*'.format(path_i)):
 #        if basename(dirdate)[:4] == '2003':
 #            for subdir in glob('{}/*'.format(dirdate)):
