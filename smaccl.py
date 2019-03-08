@@ -176,12 +176,20 @@ def get_smac_coeffs(bands):
                         directory
     '''
     NBAND = len(bands)
-    coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
 
-    for ib,band in enumerate(bands):
-        co = coeff(band)
-        for k in co.__dict__.keys():
-            coeffs[k][ib] = co.__dict__[k] 
+    if NBAND==1:
+        data = np.load(bands[0])
+        coeffs = np.zeros((4), dtype=type_coeff, order='C')
+        coeffs[:3] = data[:3]
+        coeffs[3] = data[4]
+        
+    else:
+        coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
+
+        for ib,band in enumerate(bands):
+            co = coeff(band)
+            for k in co.__dict__.keys():
+                coeffs[k][ib] = co.__dict__[k] 
 
     return coeffs
 
