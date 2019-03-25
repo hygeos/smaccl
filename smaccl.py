@@ -32,6 +32,59 @@ binname =  join(dir_bin, 'smac.clbin')
 dir_tmp = '/tmp/'
 
 type_coeff = [
+#    ('bandname',    'U25'),
+    ('ah2o',        'float32'),
+    ('nh2o',        'float32'), 
+    ('ao3',        'float32'), 
+    ('no3',        'float32'), 
+    ('ao2',        'float32'), 
+    ('no2',        'float32'), 
+    ('po2',        'float32'), 
+    ('aco2',        'float32'), 
+    ('nco2',        'float32'), 
+    ('pco2',        'float32'), 
+    ('ach4',        'float32'), 
+    ('nch4',        'float32'), 
+    ('pch4',        'float32'), 
+    ('ano2',        'float32'), 
+    ('nno2',        'float32'), 
+    ('pno2',        'float32'), 
+    ('aco',        'float32'), 
+    ('nco',        'float32'), 
+    ('pco',        'float32'), 
+    ('a0s',        'float32'), 
+    ('a1s',        'float32'), 
+    ('a2s',        'float32'), 
+    ('a3s',        'float32'), 
+    ('a0T',        'float32'), 
+    ('a1T',        'float32'), 
+    ('a2T',        'float32'), 
+    ('a3T',        'float32'), 
+    ('taur',        'float32'), 
+    ('a0taup',        'float32'), 
+    ('a1taup',        'float32'), 
+    ('wo',        'float32'), 
+    ('gc',        'float32'), 
+    ('a0P',        'float32'), 
+    ('a1P',        'float32'), 
+    ('a2P',        'float32'), 
+    ('a3P',        'float32'), 
+    ('a4P',        'float32'), 
+    ('Resa1',        'float32'), 
+    ('Resa2',        'float32'), 
+    ('Resa3',        'float32'), 
+    ('Resa4',        'float32'), 
+    ('Resr1',        'float32'), 
+    ('Resr2',        'float32'), 
+    ('Resr3',        'float32'), 
+    ('Rest1',        'float32'), 
+    ('Rest2',        'float32'), 
+    ('Rest3',        'float32'), 
+    ('Rest4',        'float32')
+  ]
+print("....  testsmaccl1 class def ")
+
+type_coeff_old = [
     ('ah2o',        'float32'),
     ('nh2o',        'float32'), 
     ('ao3',        'float32'), 
@@ -86,7 +139,6 @@ type_coeff = [
     ('Rest3',        'float32'), 
     ('Rest4',        'float32')
   ]
-print("....  testsmaccl1 class def ")
 
 class coeff:
   def __init__(self,smac_filename):
@@ -170,21 +222,25 @@ class coeff:
     self.Resa3   = float(temp[0])
     self.Resa4   = float(temp[1])
 
-def get_smac_coeffs(bands):
+def get_smac_coeffs(bands, bandidx):
     '''
     bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
                         directory
     '''
-    NBAND = len(bands)
 
-    if NBAND==1:
-        data = np.load(bands[0])
-        coeffs = np.zeros((4), dtype=type_coeff, order='C')
-        coeffs[:3] = data[:3]
-        coeffs[3] = data[4]
+    if isinstance(bands, str):
+        data = np.load(bands)
+        coeffs = np.zeros((len(bandidx)), dtype=type_coeff, order='C')
+        i = 0
+        for idx in bandidx:
+            for co in data:
+                if int(co[0][-2:]) == idx:
+                    coeffs[i] = co.tolist()[1:]
+            i+=1                
         
     else:
-        coeffs = np.zeros((NBAND), dtype=type_coeff, order='C')
+        NBAND = len(bands)
+        coeffs = np.zeros((NBAND), dtype=type_coeff_old, order='C')
 
         for ib,band in enumerate(bands):
             co = coeff(band)
@@ -341,6 +397,7 @@ class Smaccl(object):
         NBAND = coeffs.size
 
         shp = rtoa.shape
+        print(shp)
         assert shp[0] == NBAND
         if (rtoa.ndim == 4) :
             NZ  = shp[1]
@@ -390,7 +447,7 @@ class Smaccl(object):
         clpression = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=pression)
         clrtoa     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=rtoa)
         
-#        print(".... Smaccl: Smaccl  kernel (run) begin  ")
+        print(".... Smaccl: Smaccl  kernel (run) begin  ")
 
         exec_evt = self.kernel(self.clqueue, (shp[2],shp[3]), None, 
         clcoeffs, 
@@ -421,13 +478,15 @@ class Smaccl(object):
         cl.enqueue_copy(self.clqueue, Jpre, Jpred)
         cl.enqueue_copy(self.clqueue, Jtaup, Jtaupd)
  
-#        print(".... Smaccl: Smaccl  kernel (run) end  ")
+        print(".... Smaccl: Smaccl  kernel (run) end  ")
         
         return ( rsurf, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
 
     def set_queue(self, xpu='GPU'):
         typedevice = {'CPU':'Portable Computing Language','GPU':'NVIDIA CUDA'}
+#        typedevice = {'CPU':'Intel(R) OpenCL','GPU':'NVIDIA CUDA'} # mep
         platforms = cl.get_platforms()
+        print(platforms)
         for plat in platforms:
             if typedevice[xpu] == plat.name:
                 devices = plat.get_devices()

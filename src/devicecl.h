@@ -16,14 +16,14 @@ typedef struct
    float ach4, nch4, pch4;
    float ano2, nno2, pno2;
    float aco,  nco,  pco;
-   float a0u, a1u, a2u ;
+//   float a0u, a1u, a2u ;
    float a0s, a1s, a2s, a3s;
    float a0T, a1T, a2T, a3T;
-   float taur,sr;
+   float taur; //,sr;
    float a0taup, a1taup ;
    float wo, gc;
    float a0P,a1P,a2P,a3P;
-   float a4P,a5P;
+   float a4P; //,a5P;
    float Resa1,Resa2;
    float Resa3,Resa4;
    float Resr1, Resr2, Resr3;
