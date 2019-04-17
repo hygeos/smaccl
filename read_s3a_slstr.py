@@ -11,6 +11,15 @@ def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):
     return (d - epoch).astype(np.float64)/1.0e9/60.
 
 def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
+
+    wav = {'olci': np.array([ 400.37414551,  411.93795776,  443.01525879,  490.36950684,
+         510.35684204,  560.3480835 ,  620.2520752 ,  665.10235596,
+         673.85638428,  681.37701416,  708.96862793,  754.02685547,
+         761.55950928,  764.69177246,  767.82214355,  779.08508301,
+         865.42785645,  884.18774414,  899.1463623 ,  939.18139648,
+        1012.76092529]),
+       'slstr': np.array([ 555.47,  660.1 ,  867.6 , 1375.1 , 1612.1 , 2253.  ])}  
+
     ymin = bandidx*bandsize
     ymax = ymin + bandsize
     pfile = Dataset(fname)
@@ -29,7 +38,7 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
 
     mus = np.cos(sza*np.pi/180.)
     if bands_olci is None:
-        olci_idx = [2,3,4,5,6,7,8,9,10,11,15,16,17,21]
+        olci_idx = [2,3,4,5,6,7,8,9,10,11,12,16,17,18,21]
     else:
         olci_idx = bands_olci
 
@@ -38,10 +47,14 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
                 'y':(['y'], pfile['lat'][ymin:ymax])})
 
     tab_band_internal = []
+    central_wvl = []
+    sensor= []
     # bands olci
     for idx in olci_idx:
         rad_band = 'Oa{:02d}_radiance'.format(idx)
         tab_band_internal.append(rad_band)
+        central_wvl.append(wav['olci'][idx-1])
+        sensor.append('olci')
         ltoa = pfile[rad_band][ymin:ymax,:]
         f0_band = 'solar_flux_band_{}'.format(idx)
         f0 = pfile[f0_band][ymin:ymax, :]
@@ -61,12 +74,14 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
         s_band = 'S{}_radiance_an'.format(idx)
         if idx!=4:
             tab_band_internal.append(s_band)
+            central_wvl.append(wav['slstr'][idx-1])
+            sensor.append('slstr')
         ltoa = pfile[s_band][ymin:ymax,:]
         f0 = pfile[s_band].getncattr('solar_irradiance')[0]
         rtoa = (np.pi*ltoa)/(mus*f0)
         xdataset[s_band] = (['y','x'], rtoa)
 
-    slstr_idx.remove(4)
+    if 4 in slstr_idx : slstr_idx.remove(4)
     coeff_slstr = get_smac_coeffs(smacfile['slstr'], np.array(slstr_idx))
     SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
 
@@ -91,5 +106,5 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
 
     pfile.close()
 
-    return xdataset, SIZE1, SIZE2, tab_band_internal, coeff_smac, gl_size
+    return xdataset, SIZE1, SIZE2, tab_band_internal, central_wvl, sensor, coeff_smac, gl_size
 
