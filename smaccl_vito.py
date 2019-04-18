@@ -156,11 +156,11 @@ def process(config, dem_lut, S):
     smaccoef = {'olci':config['smaccoef_olci'], 'slstr':config['smaccoef_slstr']}
     nbchunk = 4
     bandsize = 3360//nbchunk
-    data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load(fname, smaccoef, 0, bandsize)
+    data, SIZE1, SIZE2, tab_band_internal, _, _ , coeffs, gl_size = load(fname, smaccoef, 0, bandsize)
     out = create_nc(fileout, gl_size, data.attrs.items(), version)
 
     for bandidx in range(nbchunk):
-        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load(fname, smaccoef, bandidx, bandsize)
+        data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load(fname, smaccoef, bandidx, bandsize)
 
         if data is None:
             print("l'image n'a pas d'attributs")
