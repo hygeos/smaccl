@@ -16,7 +16,7 @@ def SRF(sensor=None):
     '''
     if sensor is None: 
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3_SLSTR, S3B_SLSTR, '+\
-               'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11,'+\
+               'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19'
     import pandas as pd
     xLimits = []
