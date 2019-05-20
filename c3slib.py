@@ -10,9 +10,9 @@ def SRF(sensor=None):
         one sensor name in the list return by SRF()
         
     returns:
-        (wvn_limits, wvl_limits, fwhm, wvl_central, rod_effective)
+        (wvn_limits, wvl_limits, fwhm, wvl_central, rod_effective, srf_wvl, rsrf)
         with wvn in cm-1, wvl in nm, fwhm in nm, wvl_central in nm, 
-        and SRF weighted Rayleigh optical depth
+        SRF weighted Rayleigh optical depth, reference wavelegnth of the rsrf in nm, rsrf
     '''
     if sensor is None: 
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3_SLSTR, S3B_SLSTR, '+\
@@ -120,4 +120,4 @@ def SRF(sensor=None):
     for w,s in zip(srf_wvl,srf):
         od = np.squeeze(rod(w*1e-3, np.array(400), 45., 0., 1013.25))
         ODR.append(simps(s*od, x=w)/simps(s,x=w))
-    return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR)
+    return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR), srf_wvl, srf
