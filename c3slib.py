@@ -15,7 +15,7 @@ def SRF(sensor=None):
         SRF weighted Rayleigh optical depth, reference wavelegnth of the rsrf in nm, rsrf
     '''
     if sensor is None: 
-        return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3_SLSTR, S3B_SLSTR, '+\
+        return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3A_SLSTR, S3B_SLSTR, '+\
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19'
     import pandas as pd
@@ -45,7 +45,7 @@ def SRF(sensor=None):
             srf.append(srf_)
         
     elif 'SLSTR' in sensor:
-        platform = sensor[1:3]
+        platform = sensor[:3]
         if platform=='S3B' : fsrfs = glob('/rfs/proj/C3S/SRFs/SLSTR/S3B/SLSTR_PFM_S[123456]*.nc')
         else               : fsrfs = glob('/rfs/proj/C3S/SRFs/SLSTR/S3A/SLSTR_FM02_S[123456]*.nc')
         for f in np.sort(fsrfs):
