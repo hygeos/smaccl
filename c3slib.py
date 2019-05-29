@@ -17,7 +17,8 @@ def SRF(sensor=None):
     if sensor is None: 
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3A_SLSTR, S3B_SLSTR, '+\
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
-               'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19'
+               'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19, '+\
+               'S2A_MSI, S2B_MSI'
     import pandas as pd
     xLimits = []
     fwhm    = []
@@ -43,7 +44,7 @@ def SRF(sensor=None):
             xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
             srf_wvl.append(srf_wvl_ )
             srf.append(srf_)
-        
+
     elif 'SLSTR' in sensor:
         platform = sensor[:3]
         if platform=='S3B' : fsrfs = glob('/rfs/proj/C3S/SRFs/SLSTR/S3B/SLSTR_PFM_S[123456]*.nc')
@@ -62,7 +63,7 @@ def SRF(sensor=None):
             xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
             srf_wvl.append(srf_wvl_ )
             srf.append(srf_)
-            
+
     elif ('METOP' in sensor) or ('NOAA' in sensor):
         fsrfs = glob('/rfs/proj/C3S/SRFs/AVHRR/'+sensor+'_A*.txt')           
         for f in np.sort(fsrfs):
@@ -109,6 +110,23 @@ def SRF(sensor=None):
             central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
             xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
             srf_wvl.append(srf_wvl_ )
+            srf.append(srf_)
+
+    elif ('MSI' in sensor):
+        platform = sensor[:3]
+        fsrfs  = glob('/rfs/proj/C3S/SRFs/MSI/S2-SRF_COPE-GSEG-EOPG-TN-15-0007_3.0-1.xlsx')
+        data   = pd.read_excel(fsrfs[0], sheet_name='Spectral Responses ({})'.format(platform))
+        srf_wvl_     = np.array(data['SR_WL'])
+        for b,band in enumerate(data):
+            if b==0: continue
+            srf_  = np.array(data[band])
+            ok = srf_ > 0.0005 # subset only minimum transmission
+            srf_ = srf_[ok]
+            srf_wvl__ = srf_wvl_[ok]
+            fwhm .append(srf_wvl__[srf_>0.5][-1] - srf_wvl__[srf_>0.5][0])
+            central_wvl.append((srf_wvl__[srf_>0.5][-1] + srf_wvl__[srf_>0.5][0]) * 0.5)
+            xLimits.append([1e7/(srf_wvl__.max()+1.), 1e7/(srf_wvl__.min()-1.)])
+            srf_wvl.append(srf_wvl__ )
             srf.append(srf_)
             
     # wavelengths intervals
