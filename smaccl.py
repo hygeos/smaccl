@@ -32,7 +32,7 @@ binname =  join(dir_bin, 'smac.clbin')
 dir_tmp = '/tmp/'
 
 type_coeff = [
-#    ('bandname',    'U25'),
+    ('bandname',    'U25'),
     ('ah2o',        'float32'),
     ('nh2o',        'float32'), 
     ('ao3',        'float32'), 
