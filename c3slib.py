@@ -18,14 +18,34 @@ def SRF(sensor=None):
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3A_SLSTR, S3B_SLSTR, '+\
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19, '+\
-               'S2A_MSI, S2B_MSI, Terra_MISR'
+               'S2A_MSI, S2B_MSI, Terra_MISR, LANDSAT8_OLI'
     import pandas as pd
     xLimits = []
     fwhm    = []
     central_wvl = []
     srf_wvl = [] 
     srf     = []
-    
+
+    if ('LANDSAT8' in sensor):
+        platform = sensor[:8]
+        fsrf  = '/rfs/proj/C3S/SRFs/OLI/LANDSAT8/Ball_BA_RSR.v1.2.xlsx'
+        data   = pd.read_excel(fsrf, sheet_name='Band summary')
+        bandnames = data['Band'][1:]
+        for band in bandnames:
+            if band=='CA' : band='CoastalAerosol'
+            data = pd.read_excel(fsrf, sheet_name=band)
+            srf_ = np.array(data['BA RSR [watts]'])
+            srf_ = srf_/srf_.max() # normalize SRF
+            ok   = srf_ > 0.005 # subset only minimum transmission
+            srf_ = srf_[ok]
+            srf_wvl_ = np.array(data['Wavelength'])
+            srf_wvl_ = srf_wvl_[ok]
+            fwhm .append(srf_wvl_[srf_>0.5][-1] - srf_wvl_[srf_>0.5][0])
+            central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
+            xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
+            srf_wvl.append(srf_wvl_)
+            srf.append(srf_)
+
     if 'MISR' in sensor:
         platform = sensor[:5]
         if platform=='Terra' : f='/rfs/proj/C3S/SRFs/MISR/Terra/MISR_SRF.txt'
