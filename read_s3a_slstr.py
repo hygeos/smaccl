@@ -1,8 +1,9 @@
 from netCDF4 import Dataset
 import xarray as xa
 import numpy as np
-from smaccl import get_smac_coeffs
+#from smaccl import get_smac_coeffs
 from matplotlib.pyplot import imshow, show
+from utils import get_smac_coeffs
 
 def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):
     '''
@@ -42,9 +43,18 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
     else:
         olci_idx = bands_olci
 
-    xdataset = xa.Dataset({'SZA':(['y','x'], sza), 'SAA':(['y','x'], saa), 'VZA': (['y','x'], vza), 'VAA': (['y','x'], vaa), 'cloud_an': (['y','x'], cloud), 'lat': (['y','x'], lat), 'lon': (['y','x'], lon), 'quality_flags':(['y','x'], quality_fg), 'pixel_classif_flags':(['y','x'], pxl_classif_fg), 'clm':(['y','x'], cloud.astype('float32'))}, 
-            coords={'x':(['x'], pfile['lon'][:]),
-                'y':(['y'], pfile['lat'][ymin:ymax])})
+    if 'lat_intern' in pfile.variables.keys():
+        lat_axis = pfile['lat_intern']
+        lon_axis = pfile['lon_intern']
+    else:
+        lat_axis = pfile['lat']
+        lon_axis = pfile['lon']
+
+    xdataset = xa.Dataset({'SZA':(['y','x'], sza), 'SAA':(['y','x'], saa), 'VZA': (['y','x'], vza), 'VAA': (['y','x'], vaa), 'cloud_an': (['y','x'], cloud), 'lat': (['y','x'], lat), 'lon': (['y','x'], lon), 'quality_flags':(['y','x'], quality_fg.astype('int32')), 'pixel_classif_flags':(['y','x'], pxl_classif_fg), 'clm':(['y','x'], cloud.astype('float32'))}, 
+            coords={'x':(['x'], lon_axis[:]),
+                'y':(['y'], lat_axis[ymin:ymax])})
+#            coords={'x':(['x'], pfile['lon'][:]),
+#                'y':(['y'], pfile['lat'][ymin:ymax])})
 
     tab_band_internal = []
     central_wvl = []
@@ -81,9 +91,9 @@ def load(fname, smacfile, bandidx, bandsize, bands_olci=None, bands_slstr=None):
         rtoa = (np.pi*ltoa)/(mus*f0)
         xdataset[s_band] = (['y','x'], rtoa)
 
+    SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
     if 4 in slstr_idx : slstr_idx.remove(4)
     coeff_slstr = get_smac_coeffs(smacfile['slstr'], np.array(slstr_idx))
-    SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
 
     coeff_smac = np.concatenate([coeff_olci, coeff_slstr])
 

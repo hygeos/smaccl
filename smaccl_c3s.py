@@ -2,7 +2,7 @@
 
 import numpy as np
 from luts.luts import read_mlut, MLUT, Idx
-from smaccl import Smaccl#, Ps, dPsdz, get_smac_coeffs
+from smaccl import Smaccl#, Ps, dPsdz#, get_smac_coeffs
 import xarray
 from glob import glob
 import math
@@ -18,6 +18,7 @@ from sys import argv
 from matplotlib.pyplot import imshow, show
 from read_s3a_slstr import load
 from utils import Ps, dPsdz
+#from utils import get_smac_coeffs
 #from read_cams import load_cams
 
 def pre_merra2(faero, fptwo):
@@ -195,6 +196,7 @@ def process(config, dem_lut, S):
             merra_lut = pre_merra2(merra_aerosol, merra_ptwo)
 
         iaero = np.zeros(data['SZA'].shape, dtype='int')
+
         # TODO: test sur l'existance de données auxilliaires sinon utilisation de la climato et passage du 2eme bit de ac_process_flag a 1.
 
         # files containg SMAC coefficients
@@ -270,7 +272,8 @@ def process(config, dem_lut, S):
             tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
             phis_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
             phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-            iaero_ext    = np.zeros((GSIZEXT), dtype='int32')
+            iaero_ext    = np.zeros((GSIZEXT), dtype='int32')   + np.NaN
+
             for i in range(NB):
                 rtoa_ext[i,:GSIZE] = rtoa[i,:]
             del rtoa
@@ -283,6 +286,7 @@ def process(config, dem_lut, S):
             tetav_ext[:GSIZE]    = tetav
             phis_ext[:GSIZE]     = phis
             phiv_ext[:GSIZE]     = phiv
+
             iaero_ext[:GSIZE]    = iaero[good]
             del pressure
             del tetas
@@ -300,7 +304,6 @@ def process(config, dem_lut, S):
             uo3_ext      = np.reshape(uo3_ext,     (Z,XBLOCK,XGRID),    order='C')
             taup550_ext  = np.reshape(taup550_ext, (Z,XBLOCK,XGRID),    order='C')
             pressure_ext = np.reshape(pressure_ext,(Z,XBLOCK,XGRID),    order='C')
-            iaero_ext    = np.reshape(iaero_ext,   (Z,XBLOCK,XGRID),    order='C')
 
     #        rsurf_ext = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
     #        Jrtoa_ext = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
@@ -309,7 +312,7 @@ def process(config, dem_lut, S):
     #        Jpre_ext = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
     #        Jtaup_ext = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
 
-            (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, taup550_ext, pressure_ext, rtoa_ext, iaero_ext,XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
+            (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, taup550_ext, pressure_ext, rtoa_ext, iaero_ext, XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
             # Output arrays reshaping \n",
             rsurf_ext = np.reshape(rsurf_ext,(NB,GSIZEXT), order='C')
