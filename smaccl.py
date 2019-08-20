@@ -10,12 +10,9 @@ import numpy as np
 import os
 from os.path import dirname, realpath, join, exists
 import pyopencl as cl
-import pyopencl.array as cla
 import sys
 if sys.version_info[:2] >= (3, 0):
         xrange = range
-
-import traceback
 
 __module__    = "smaccl.py"    
 __version__   = "1.01.00"
@@ -32,223 +29,242 @@ binname =  join(dir_bin, 'smac.clbin')
 dir_tmp = '/tmp/'
 os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
-#type_coeff = [
-##    ('bandname',    'U25'),
-#    ('ah2o',        'float32'),
-#    ('nh2o',        'float32'), 
-#    ('ao3',        'float32'), 
-#    ('no3',        'float32'), 
-#    ('ao2',        'float32'), 
-#    ('no2',        'float32'), 
-#    ('po2',        'float32'), 
-#    ('aco2',        'float32'), 
-#    ('nco2',        'float32'), 
-#    ('pco2',        'float32'), 
-#    ('ach4',        'float32'), 
-#    ('nch4',        'float32'), 
-#    ('pch4',        'float32'), 
-#    ('ano2',        'float32'), 
-#    ('nno2',        'float32'), 
-#    ('pno2',        'float32'), 
-#    ('aco',        'float32'), 
-#    ('nco',        'float32'), 
-#    ('pco',        'float32'), 
-#    ('a0s',        'float32'), 
-#    ('a1s',        'float32'), 
-#    ('a2s',        'float32'), 
-#    ('a3s',        'float32'), 
-#    ('a0T',        'float32'), 
-#    ('a1T',        'float32'), 
-#    ('a2T',        'float32'), 
-#    ('a3T',        'float32'), 
-#    ('taur',        'float32'), 
-#    ('a0taup',        'float32'), 
-#    ('a1taup',        'float32'), 
-#    ('wo',        'float32'), 
-#    ('gc',        'float32'), 
-#    ('a0P',        'float32'), 
-#    ('a1P',        'float32'), 
-#    ('a2P',        'float32'), 
-#    ('a3P',        'float32'), 
-#    ('a4P',        'float32'), 
-#    ('Resa1',        'float32'), 
-#    ('Resa2',        'float32'), 
-#    ('Resa3',        'float32'), 
-#    ('Resa4',        'float32'), 
-#    ('Resr1',        'float32'), 
-#    ('Resr2',        'float32'), 
-#    ('Resr3',        'float32'), 
-#    ('Rest1',        'float32'), 
-#    ('Rest2',        'float32'), 
-#    ('Rest3',        'float32'), 
-#    ('Rest4',        'float32')
-#  ]
-#print("....  testsmaccl1 class def ")
-#
-#type_coeff_old = [
-#    ('ah2o',        'float32'),
-#    ('nh2o',        'float32'), 
-#    ('ao3',        'float32'), 
-#    ('no3',        'float32'), 
-#    ('ao2',        'float32'), 
-#    ('no2',        'float32'), 
-#    ('po2',        'float32'), 
-#    ('aco2',        'float32'), 
-#    ('nco2',        'float32'), 
-#    ('pco2',        'float32'), 
-#    ('ach4',        'float32'), 
-#    ('nch4',        'float32'), 
-#    ('pch4',        'float32'), 
-#    ('ano2',        'float32'), 
-#    ('nno2',        'float32'), 
-#    ('pno2',        'float32'), 
-#    ('aco',        'float32'), 
-#    ('nco',        'float32'), 
-#    ('pco',        'float32'), 
-#    ('a0u',        'float32'), 
-#    ('a1u',        'float32'), 
-#    ('a2u',        'float32'), 
-#    ('a0s',        'float32'), 
-#    ('a1s',        'float32'), 
-#    ('a2s',        'float32'), 
-#    ('a3s',        'float32'), 
-#    ('a0T',        'float32'), 
-#    ('a1T',        'float32'), 
-#    ('a2T',        'float32'), 
-#    ('a3T',        'float32'), 
-#    ('taur',        'float32'), 
-#    ('sr',        'float32'), 
-#    ('a0taup',        'float32'), 
-#    ('a1taup',        'float32'), 
-#    ('wo',        'float32'), 
-#    ('gc',        'float32'), 
-#    ('a0P',        'float32'), 
-#    ('a1P',        'float32'), 
-#    ('a2P',        'float32'), 
-#    ('a3P',        'float32'), 
-#    ('a4P',        'float32'), 
-#    ('a5P',        'float32'), 
-#    ('Resa1',        'float32'), 
-#    ('Resa2',        'float32'), 
-#    ('Resa3',        'float32'), 
-#    ('Resa4',        'float32'), 
-#    ('Resr1',        'float32'), 
-#    ('Resr2',        'float32'), 
-#    ('Resr3',        'float32'), 
-#    ('Rest1',        'float32'), 
-#    ('Rest2',        'float32'), 
-#    ('Rest3',        'float32'), 
-#    ('Rest4',        'float32')
-#  ]
+type_coeff = [
+    ('bandname',    'U25'),
+    ('ah2o',        'float32'),
+    ('nh2o',        'float32'), 
+    ('ao3',        'float32'), 
+    ('no3',        'float32'), 
+    ('ao2',        'float32'), 
+    ('no2',        'float32'), 
+    ('po2',        'float32'), 
+    ('aco2',        'float32'), 
+    ('nco2',        'float32'), 
+    ('pco2',        'float32'), 
+    ('ach4',        'float32'), 
+    ('nch4',        'float32'), 
+    ('pch4',        'float32'), 
+    ('ano2',        'float32'), 
+    ('nno2',        'float32'), 
+    ('pno2',        'float32'), 
+    ('aco',        'float32'), 
+    ('nco',        'float32'), 
+    ('pco',        'float32'), 
+    ('a0s',        'float32'), 
+    ('a1s',        'float32'), 
+    ('a2s',        'float32'), 
+    ('a3s',        'float32'), 
+    ('a0T',        'float32'), 
+    ('a1T',        'float32'), 
+    ('a2T',        'float32'), 
+    ('a3T',        'float32'), 
+    ('taur',        'float32'), 
+    ('a0taup',        'float32'), 
+    ('a1taup',        'float32'), 
+    ('wo',        'float32'), 
+    ('gc',        'float32'), 
+    ('a0P',        'float32'), 
+    ('a1P',        'float32'), 
+    ('a2P',        'float32'), 
+    ('a3P',        'float32'), 
+    ('a4P',        'float32'), 
+    ('Resa1',        'float32'), 
+    ('Resa2',        'float32'), 
+    ('Resa3',        'float32'), 
+    ('Resa4',        'float32'), 
+    ('Resr1',        'float32'), 
+    ('Resr2',        'float32'), 
+    ('Resr3',        'float32'), 
+    ('Rest1',        'float32'), 
+    ('Rest2',        'float32'), 
+    ('Rest3',        'float32'), 
+    ('Rest4',        'float32')
+  ]
 
-#class coeff:
-#  def __init__(self,smac_filename):
-#    with open(smac_filename) as f:
-#      lines=f.readlines()
-#    #H20
-#    temp=lines[0].strip().split()
-#    self.ah2o=float(temp[0])
-#    self.nh2o=float(temp[1])
-#    #O3
-#    temp=lines[1].strip().split()
-#    self.ao3=float(temp[0])
-#    self.no3=float(temp[1])
-#    #O2
-#    temp=lines[2].strip().split()
-#    self.ao2=float(temp[0])
-#    self.no2=float(temp[1])
-#    self.po2=float(temp[2])
-#    #CO2
-#    temp=lines[3].strip().split()
-#    self.aco2=float(temp[0])
-#    self.nco2=float(temp[1])
-#    self.pco2=float(temp[2])
-#    #NH4
-#    temp=lines[4].strip().split()
-#    self.ach4=float(temp[0])
-#    self.nch4=float(temp[1])
-#    self.pch4=float(temp[2])
-#    #NO2
-#    temp=lines[5].strip().split()
-#    self.ano2=float(temp[0])
-#    self.nno2=float(temp[1])
-#    self.pno2=float(temp[2])
-#    #NO2
-#    temp=lines[6].strip().split()
-#    self.aco=float(temp[0])
-#    self.nco=float(temp[1])
-#    self.pco=float(temp[2])
-#
-#    #rayleigh and aerosol scattering
-#    temp=lines[7].strip().split()
-#    self.a0s=float(temp[0])
-#    self.a1s=float(temp[1])
-#    self.a2s=float(temp[2])
-#    self.a3s=float(temp[3])
-#    temp=lines[8].strip().split()
-#    self.a0T=float(temp[0])
-#    self.a1T=float(temp[1])
-#    self.a2T=float(temp[2])
-#    self.a3T=float(temp[3])
-#    temp=lines[9].strip().split()
-#    self.taur=float(temp[0])
-#    self.sr=float(temp[0])
-#    temp=lines[10].strip().split()
-#    self.a0taup  = float(temp[0])
-#    self.a1taup  = float(temp[1])
-#    temp=lines[11].strip().split()
-#    self.wo      = float(temp[0])
-#    self.gc      = float(temp[1])
-#    temp=lines[12].strip().split()
-#    self.a0P     = float(temp[0])
-#    self.a1P     = float(temp[1])
-#    self.a2P     = float(temp[2])
-#    temp=lines[13].strip().split()
-#    self.a3P     = float(temp[0])
-#    self.a4P     = float(temp[1])
-#    temp=lines[14].strip().split()
-#    self.Rest1   = float(temp[0])
-#    self.Rest2   = float(temp[1])
-#    temp=lines[15].strip().split()
-#    self.Rest3   = float(temp[0])
-#    self.Rest4   = float(temp[1])
-#    temp=lines[16].strip().split()
-#    self.Resr1   = float(temp[0])
-#    self.Resr2   = float(temp[1])
-#    self.Resr3   = float(temp[2])
-#    temp=lines[17].strip().split()
-#    self.Resa1   = float(temp[0])
-#    self.Resa2   = float(temp[1])
-#    temp=lines[18].strip().split()
-#    self.Resa3   = float(temp[0])
-#    self.Resa4   = float(temp[1])
 
-#def get_smac_coeffs(bands, bandidx):
-#    '''
-#    bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
-#                        directory
-#    '''
-#
-#    if isinstance(bands, str):
-#        data = np.load(bands)
-#        coeffs = np.zeros((len(bandidx)), dtype=type_coeff, order='C')
-#        i = 0
-#        for idx in bandidx:
-#            for co in data:
-#                if int(co[0][-2:]) == idx:
-#                    coeffs[i] = co.tolist()[1:]
-#            i+=1                
-#        
-#    else:
-#        NBAND = len(bands)
-#        coeffs = np.zeros((NBAND), dtype=type_coeff_old, order='C')
-#
-#        for ib,band in enumerate(bands):
-#            co = coeff(band)
-#            for k in co.__dict__.keys():
-#                coeffs[k][ib] = co.__dict__[k] 
-#
-#    return coeffs
+type_coeff_reduced = [
+#    ('bandname',    'U25'),
+    ('ah2o',        'float32'),
+    ('nh2o',        'float32'), 
+    ('ao3',        'float32'), 
+    ('no3',        'float32'), 
+    ('ao2',        'float32'), 
+    ('no2',        'float32'), 
+    ('po2',        'float32'), 
+    ('aco2',        'float32'), 
+    ('nco2',        'float32'), 
+    ('pco2',        'float32'), 
+    ('ach4',        'float32'), 
+    ('nch4',        'float32'), 
+    ('pch4',        'float32'), 
+    ('ano2',        'float32'), 
+    ('nno2',        'float32'), 
+    ('pno2',        'float32'), 
+    ('aco',        'float32'), 
+    ('nco',        'float32'), 
+    ('pco',        'float32'), 
+    ('a0s',        'float32'), 
+    ('a1s',        'float32'), 
+    ('a2s',        'float32'), 
+    ('a3s',        'float32'), 
+    ('a0T',        'float32'), 
+    ('a1T',        'float32'), 
+    ('a2T',        'float32'), 
+    ('a3T',        'float32'), 
+    ('taur',        'float32'), 
+    ('a0taup',        'float32'), 
+    ('a1taup',        'float32'), 
+    ('wo',        'float32'), 
+    ('gc',        'float32'), 
+    ('a0P',        'float32'), 
+    ('a1P',        'float32'), 
+    ('a2P',        'float32'), 
+    ('a3P',        'float32'), 
+    ('a4P',        'float32'), 
+    ('Resa1',        'float32'), 
+    ('Resa2',        'float32'), 
+    ('Resa3',        'float32'), 
+    ('Resa4',        'float32'), 
+    ('Resr1',        'float32'), 
+    ('Resr2',        'float32'), 
+    ('Resr3',        'float32'), 
+    ('Rest1',        'float32'), 
+    ('Rest2',        'float32'), 
+    ('Rest3',        'float32'), 
+    ('Rest4',        'float32')
+  ]
+
+
+def get_smac_coeffs(coeff_array_file, bandidx):
+    '''
+    coeff_array_file : a filename of a saved numpy array (.npy) containing all coefficiens,
+    bandidx :  list of index of bands to be extracted
+    '''
+
+    data = np.load(coeff_array_file)
+    if len(data.shape)==2:
+        coeffs = np.zeros((len(bandidx), data.shape[1]), dtype=type_coeff_reduced, order='C')
+        for i, idx in enumerate(bandidx):
+            for i2, d in enumerate(data[idx-1]):
+                coeffs[i,i2] = d.tolist()[1:]
+    else:
+        coeffs = np.zeros((len(bandidx)), dtype=type_coeff_reduced, order='C')
+        for i, idx in enumerate(bandidx):
+            for co in data:
+                if int(co[0][-2:]) == idx:
+                    coeffs[i] = co.tolist()[1:]
+        
+    return coeffs
+
+
+class coeff:
+  def __init__(self,smac_filename):
+    with open(smac_filename) as f:
+      lines=f.readlines()
+    #H20
+    temp=lines[0].strip().split()
+    self.ah2o=float(temp[0])
+    self.nh2o=float(temp[1])
+    #O3
+    temp=lines[1].strip().split()
+    self.ao3=float(temp[0])
+    self.no3=float(temp[1])
+    #O2
+    temp=lines[2].strip().split()
+    self.ao2=float(temp[0])
+    self.no2=float(temp[1])
+    self.po2=float(temp[2])
+    #CO2
+    temp=lines[3].strip().split()
+    self.aco2=float(temp[0])
+    self.nco2=float(temp[1])
+    self.pco2=float(temp[2])
+    #NH4
+    temp=lines[4].strip().split()
+    self.ach4=float(temp[0])
+    self.nch4=float(temp[1])
+    self.pch4=float(temp[2])
+    #NO2
+    temp=lines[5].strip().split()
+    self.ano2=float(temp[0])
+    self.nno2=float(temp[1])
+    self.pno2=float(temp[2])
+    #NO2
+    temp=lines[6].strip().split()
+    self.aco=float(temp[0])
+    self.nco=float(temp[1])
+    self.pco=float(temp[2])
+
+    #rayleigh and aerosol scattering
+    temp=lines[7].strip().split()
+    self.a0s=float(temp[0])
+    self.a1s=float(temp[1])
+    self.a2s=float(temp[2])
+    self.a3s=float(temp[3])
+    temp=lines[8].strip().split()
+    self.a0T=float(temp[0])
+    self.a1T=float(temp[1])
+    self.a2T=float(temp[2])
+    self.a3T=float(temp[3])
+    temp=lines[9].strip().split()
+    self.taur=float(temp[0])
+    self.sr=float(temp[0])
+    temp=lines[10].strip().split()
+    self.a0taup  = float(temp[0])
+    self.a1taup  = float(temp[1])
+    temp=lines[11].strip().split()
+    self.wo      = float(temp[0])
+    self.gc      = float(temp[1])
+    temp=lines[12].strip().split()
+    self.a0P     = float(temp[0])
+    self.a1P     = float(temp[1])
+    self.a2P     = float(temp[2])
+    temp=lines[13].strip().split()
+    self.a3P     = float(temp[0])
+    self.a4P     = float(temp[1])
+    temp=lines[14].strip().split()
+    self.Rest1   = float(temp[0])
+    self.Rest2   = float(temp[1])
+    temp=lines[15].strip().split()
+    self.Rest3   = float(temp[0])
+    self.Rest4   = float(temp[1])
+    temp=lines[16].strip().split()
+    self.Resr1   = float(temp[0])
+    self.Resr2   = float(temp[1])
+    self.Resr3   = float(temp[2])
+    temp=lines[17].strip().split()
+    self.Resa1   = float(temp[0])
+    self.Resa2   = float(temp[1])
+    temp=lines[18].strip().split()
+    self.Resa3   = float(temp[0])
+    self.Resa4   = float(temp[1])
+
+def get_smac_coeffs_fromtxt(bands, bandidx):
+    '''
+    bands : a list of string containing band names to be processed, 
+    should be indentical to names in the COEFFS directory
+    '''
+
+    if isinstance(bands, str):
+        data = np.load(bands)
+        coeffs = np.zeros((len(bandidx)), dtype=type_coeff_reduced, order='C')
+        i = 0
+        for idx in bandidx:
+            for co in data:
+                if int(co[0][-2:]) == idx:
+                    coeffs[i] = co.tolist()[1:]
+            i+=1                
+        
+    else:
+        NBAND = len(bands)
+        coeffs = np.zeros((NBAND), dtype=type_coeff_reduced, order='C')
+
+        for ib,band in enumerate(bands):
+            co = coeff(band)
+            for k in co.__dict__.keys():
+                coeffs[k][ib] = co.__dict__[k] 
+
+    return coeffs
 
 #def Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006):
 #    T1 = np.log(R*T) - np.log(-R*lam*z+R*T)

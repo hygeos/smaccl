@@ -2,8 +2,11 @@ import numpy as np
 from glob import glob
 import h5py
 import sys
+from luts.luts import MLUT
+import xarray
 sys.path.insert(0, '/home/did/RTC/SMART-G/')
 from smartg.atmosphere import rod, simps
+
 def SRF(sensor=None):
     '''
     Arguments:
@@ -177,3 +180,89 @@ def SRF(sensor=None):
         od = np.squeeze(rod(w*1e-3, np.array(400), 45., 0., 1013.25))
         ODR.append(simps(s*od, x=w)/simps(s,x=w))
     return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR), srf_wvl, srf
+
+
+def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):
+    '''
+        transform the date into a duration in minutes since epoch
+        by default from '1980-01-01T00:00:00.000000000'
+    '''
+    
+    return (d - epoch).astype(np.float64)/1.0e9/60.
+
+
+def Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006):
+    T1 = np.log(R*T) - np.log(-R*lam*z+R*T)
+
+    return p0*np.exp(-g/(R*lam)*T1)
+
+
+def dPsdz(z,p0,T, g=9.801, R=287.058, lam=-0.006):
+
+    return g*Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006)/(R*(T-lam*z))
+
+
+def pre_merra2(faero, fptwo):
+    '''
+        Read MERRA2 2 ancillary data files and store all information into a MLUT object for further use
+        (mainly for spatial and temporal interpolation)
+    '''
+    merra = xarray.open_dataset(faero)
+    merra_lut = MLUT()
+    # Add the good axes
+    merra_lut.add_axis('time', date_to_float(merra.time.data)) # float array of delta time in ns from epoch time
+    merra_lut.add_axis('lat',  merra.lat.data)
+    merra_lut.add_axis('lon',  merra.lon.data)
+    Tau = merra['TOTEXTTAU'].data
+    merra_lut.add_dataset('TOTEXTTAU', Tau, axnames=['time','lat','lon'])
+    merra_lut.add_dataset('TOTSCATAU', merra['TOTSCATAU'].data, axnames=['time','lat','lon'])
+    merra_lut.add_dataset('TOTANGSTR', merra['TOTANGSTR'].data, axnames=['time','lat','lon'])
+    merra_lut.add_dataset('BC_FRAC' , merra['BCEXTTAU'].data/Tau , axnames=['time','lat','lon'])
+    merra_lut.add_dataset('DU_FRAC' , merra['DUEXTTAU'].data/Tau , axnames=['time','lat','lon'])
+    merra_lut.add_dataset('OC_FRAC' , merra['OCEXTTAU'].data/Tau , axnames=['time','lat','lon'])
+    merra_lut.add_dataset('SS_FRAC' , merra['SSEXTTAU'].data/Tau , axnames=['time','lat','lon'])
+    merra_lut.add_dataset('SU_FRAC' , merra['SUEXTTAU'].data/Tau , axnames=['time','lat','lon'])
+  
+    merra = xarray.open_dataset(fptwo)
+    merra_lut.add_dataset('TO3',  merra['TO3'].data,  axnames=['time','lat','lon'])
+    merra_lut.add_dataset('SLP',  merra['SLP'].data,  axnames=['time','lat','lon'])
+    merra_lut.add_dataset('T10M', merra['T10M'].data, axnames=['time','lat','lon'])
+    merra_lut.add_dataset('TQV',  merra['TQV'].data,  axnames=['time','lat','lon'])
+    del merra, Tau
+
+    return merra_lut
+
+
+def pre_aer_models(faer):
+    '''
+        Read MERRA2 aerosols components fraction of the aerosol models
+    '''
+    match = {'sulf':'SU', 'dust':'DU', 'oc':'OC', 'ssalt':'SS', 'bc':'BC'}
+    f = open(faer, 'r')
+    frac_aer_model = {}
+    for key in match.keys():
+        f.readline ()
+        line = f.readline ()
+        frac_aer_model[key] =  np.array(line.split()).astype(float)
+    f.close()
+    
+    return frac_aer_model
+
+
+def closest_model(X, Xb):
+    '''
+    return the closest model number compared to reference basis
+    it is a distance minimization in a 5-dimensional space
+    '''
+
+    return np.sum((X-Xb)**2, axis=0).argmin(axis=0)
+
+
+def closest_models(X, Xb):
+    '''
+    return the 10 closest model numbers compared to reference basis
+    it is a distance minimization in a 5-dimensional space
+    '''
+
+    return np.sum((X-Xb)**2, axis=0).argsort(axis=0)[:10, :]
+
