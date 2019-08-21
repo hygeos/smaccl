@@ -30,23 +30,23 @@ dir_tmp = '/tmp/'
 os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 type_coeff = [
-    ('bandname',    'U25'),
-    ('ah2o',        'float32'),
-    ('nh2o',        'float32'), 
+    ('bandname',   'U25'),
+    ('ah2o',       'float32'),
+    ('nh2o',       'float32'), 
     ('ao3',        'float32'), 
     ('no3',        'float32'), 
     ('ao2',        'float32'), 
     ('no2',        'float32'), 
     ('po2',        'float32'), 
-    ('aco2',        'float32'), 
-    ('nco2',        'float32'), 
-    ('pco2',        'float32'), 
-    ('ach4',        'float32'), 
-    ('nch4',        'float32'), 
-    ('pch4',        'float32'), 
-    ('ano2',        'float32'), 
-    ('nno2',        'float32'), 
-    ('pno2',        'float32'), 
+    ('aco2',       'float32'), 
+    ('nco2',       'float32'), 
+    ('pco2',       'float32'), 
+    ('ach4',       'float32'), 
+    ('nch4',       'float32'), 
+    ('pch4',       'float32'), 
+    ('ano2',       'float32'), 
+    ('nno2',       'float32'), 
+    ('pno2',       'float32'), 
     ('aco',        'float32'), 
     ('nco',        'float32'), 
     ('pco',        'float32'), 
@@ -58,48 +58,48 @@ type_coeff = [
     ('a1T',        'float32'), 
     ('a2T',        'float32'), 
     ('a3T',        'float32'), 
-    ('taur',        'float32'), 
-    ('a0taup',        'float32'), 
-    ('a1taup',        'float32'), 
-    ('wo',        'float32'), 
-    ('gc',        'float32'), 
+    ('taur',       'float32'), 
+    ('a0taup',     'float32'), 
+    ('a1taup',     'float32'), 
+    ('wo',         'float32'), 
+    ('gc',         'float32'), 
     ('a0P',        'float32'), 
     ('a1P',        'float32'), 
     ('a2P',        'float32'), 
     ('a3P',        'float32'), 
     ('a4P',        'float32'), 
-    ('Resa1',        'float32'), 
-    ('Resa2',        'float32'), 
-    ('Resa3',        'float32'), 
-    ('Resa4',        'float32'), 
-    ('Resr1',        'float32'), 
-    ('Resr2',        'float32'), 
-    ('Resr3',        'float32'), 
-    ('Rest1',        'float32'), 
-    ('Rest2',        'float32'), 
-    ('Rest3',        'float32'), 
-    ('Rest4',        'float32')
+    ('Resa1',      'float32'), 
+    ('Resa2',      'float32'), 
+    ('Resa3',      'float32'), 
+    ('Resa4',      'float32'), 
+    ('Resr1',      'float32'), 
+    ('Resr2',      'float32'), 
+    ('Resr3',      'float32'), 
+    ('Rest1',      'float32'), 
+    ('Rest2',      'float32'), 
+    ('Rest3',      'float32'), 
+    ('Rest4',      'float32')
   ]
 
 
 type_coeff_reduced = [
-#    ('bandname',    'U25'),
-    ('ah2o',        'float32'),
-    ('nh2o',        'float32'), 
+#    ('bandname',  'U25'),
+    ('ah2o',       'float32'),
+    ('nh2o',       'float32'), 
     ('ao3',        'float32'), 
     ('no3',        'float32'), 
     ('ao2',        'float32'), 
     ('no2',        'float32'), 
     ('po2',        'float32'), 
-    ('aco2',        'float32'), 
-    ('nco2',        'float32'), 
-    ('pco2',        'float32'), 
-    ('ach4',        'float32'), 
-    ('nch4',        'float32'), 
-    ('pch4',        'float32'), 
-    ('ano2',        'float32'), 
-    ('nno2',        'float32'), 
-    ('pno2',        'float32'), 
+    ('aco2',       'float32'), 
+    ('nco2',       'float32'), 
+    ('pco2',       'float32'), 
+    ('ach4',       'float32'), 
+    ('nch4',       'float32'), 
+    ('pch4',       'float32'), 
+    ('ano2',       'float32'), 
+    ('nno2',       'float32'), 
+    ('pno2',       'float32'), 
     ('aco',        'float32'), 
     ('nco',        'float32'), 
     ('pco',        'float32'), 
@@ -111,41 +111,96 @@ type_coeff_reduced = [
     ('a1T',        'float32'), 
     ('a2T',        'float32'), 
     ('a3T',        'float32'), 
-    ('taur',        'float32'), 
-    ('a0taup',        'float32'), 
-    ('a1taup',        'float32'), 
-    ('wo',        'float32'), 
-    ('gc',        'float32'), 
+    ('taur',       'float32'), 
+    ('a0taup',     'float32'), 
+    ('a1taup',     'float32'), 
+    ('wo',         'float32'), 
+    ('gc',         'float32'), 
     ('a0P',        'float32'), 
     ('a1P',        'float32'), 
     ('a2P',        'float32'), 
     ('a3P',        'float32'), 
     ('a4P',        'float32'), 
-    ('Resa1',        'float32'), 
-    ('Resa2',        'float32'), 
-    ('Resa3',        'float32'), 
-    ('Resa4',        'float32'), 
-    ('Resr1',        'float32'), 
-    ('Resr2',        'float32'), 
-    ('Resr3',        'float32'), 
-    ('Rest1',        'float32'), 
-    ('Rest2',        'float32'), 
-    ('Rest3',        'float32'), 
-    ('Rest4',        'float32')
+    ('Resa1',      'float32'), 
+    ('Resa2',      'float32'), 
+    ('Resa3',      'float32'), 
+    ('Resa4',      'float32'), 
+    ('Resr1',      'float32'), 
+    ('Resr2',      'float32'), 
+    ('Resr3',      'float32'), 
+    ('Rest1',      'float32'), 
+    ('Rest2',      'float32'), 
+    ('Rest3',      'float32'), 
+    ('Rest4',      'float32')
+  ]
+
+type_coeff_old = [
+    ('ah2o',       'float32'),
+    ('nh2o',       'float32'), 
+    ('ao3',        'float32'), 
+    ('no3',        'float32'), 
+    ('ao2',        'float32'), 
+    ('no2',        'float32'), 
+    ('po2',        'float32'), 
+    ('aco2',       'float32'), 
+    ('nco2',       'float32'), 
+    ('pco2',       'float32'), 
+    ('ach4',       'float32'), 
+    ('nch4',       'float32'), 
+    ('pch4',       'float32'), 
+    ('ano2',       'float32'), 
+    ('nno2',       'float32'), 
+    ('pno2',       'float32'), 
+    ('aco',        'float32'), 
+    ('nco',        'float32'), 
+    ('pco',        'float32'), 
+    ('a0s',        'float32'), 
+    ('a1s',        'float32'), 
+    ('a2s',        'float32'), 
+    ('a3s',        'float32'), 
+    ('a0T',        'float32'), 
+    ('a1T',        'float32'), 
+    ('a2T',        'float32'), 
+    ('a3T',        'float32'), 
+    ('taur',       'float32'), 
+    ('sr',         'float32'), 
+    ('a0taup',     'float32'), 
+    ('a1taup',     'float32'), 
+    ('wo',         'float32'), 
+    ('gc',         'float32'), 
+    ('a0P',        'float32'), 
+    ('a1P',        'float32'), 
+    ('a2P',        'float32'), 
+    ('a3P',        'float32'), 
+    ('a4P',        'float32'), 
+    ('Resa1',      'float32'), 
+    ('Resa2',      'float32'), 
+    ('Resa3',      'float32'), 
+    ('Resa4',      'float32'), 
+    ('Resr1',      'float32'), 
+    ('Resr2',      'float32'), 
+    ('Resr3',      'float32'), 
+    ('Rest1',      'float32'), 
+    ('Rest2',      'float32'), 
+    ('Rest3',      'float32'), 
+    ('Rest4',      'float32')
   ]
 
 
-def get_smac_coeffs(coeff_array_file, bandidx):
+def get_smac_coeffs(coeff_array_file, bandidx=None):
     '''
     coeff_array_file : a filename of a saved numpy array (.npy) containing all coefficiens,
     bandidx :  list of index of bands to be extracted
     '''
 
     data = np.load(coeff_array_file)
+    if bandidx is None:
+        bandidx = np.arange(data.shape[0])
+
     if len(data.shape)==2:
         coeffs = np.zeros((len(bandidx), data.shape[1]), dtype=type_coeff_reduced, order='C')
         for i, idx in enumerate(bandidx):
-            for i2, d in enumerate(data[idx-1]):
+            for i2, d in enumerate(data[idx]):
                 coeffs[i,i2] = d.tolist()[1:]
     else:
         coeffs = np.zeros((len(bandidx)), dtype=type_coeff_reduced, order='C')
@@ -239,39 +294,24 @@ class coeff:
     self.Resa3   = float(temp[0])
     self.Resa4   = float(temp[1])
 
-def get_smac_coeffs_fromtxt(bands, bandidx):
+
+def get_smac_coeffs_fromtxt(bands):
     '''
+    OLD definition of SMAC COEFS computed by third party
+    just for back compatibility
     bands : a list of string containing band names to be processed, 
     should be indentical to names in the COEFFS directory
     '''
+    NBAND = len(bands)
+    coeffs = np.zeros((NBAND), dtype=type_coeff_old, order='C')
 
-    if isinstance(bands, str):
-        data = np.load(bands)
-        coeffs = np.zeros((len(bandidx)), dtype=type_coeff_reduced, order='C')
-        i = 0
-        for idx in bandidx:
-            for co in data:
-                if int(co[0][-2:]) == idx:
-                    coeffs[i] = co.tolist()[1:]
-            i+=1                
-        
-    else:
-        NBAND = len(bands)
-        coeffs = np.zeros((NBAND), dtype=type_coeff_reduced, order='C')
-
-        for ib,band in enumerate(bands):
-            co = coeff(band)
-            for k in co.__dict__.keys():
-                coeffs[k][ib] = co.__dict__[k] 
+    for ib,band in enumerate(bands):
+        co = coeff(band)
+        for k in co.__dict__.keys():
+            coeffs[k][ib] = co.__dict__[k] 
 
     return coeffs
 
-#def Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006):
-#    T1 = np.log(R*T) - np.log(-R*lam*z+R*T)
-#    return p0*np.exp(-g/(R*lam)*T1) 
-
-#def dPsdz(z,p0,T, g=9.801, R=287.058, lam=-0.006):
-#    return g*Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006)/(R*(T-lam*z))
 
 class Smaccl(object):
 
@@ -367,7 +407,7 @@ class Smaccl(object):
         
         #print("....  testsmaccl1 class createOutputArray ")
         
-        outputArray = np.array(shp, dtype=dtype)
+        #outputArray = np.array(shp, dtype=dtype)
         
         #return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY, outputArray.nbytes)
         return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=buf)  # 
@@ -383,8 +423,7 @@ class Smaccl(object):
 
         Arguments:
 
-            - bands : a list of string containing band names to be processed, should be indentical to names in the COEFFS 
-                    directory
+            - coeffs : array of smac coefficients, its first dimension detrmines the number of bands processed
 
             - tetas: SZA float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
 
@@ -411,7 +450,6 @@ class Smaccl(object):
             - NBLOOP: number of runs within a thread for the same pixel (should be used for Monte Carlo draws)
 
         '''
-        NBAND = coeffs.size
         NBAND = coeffs.shape[0]
         if len(coeffs.shape) == 2:
             nMod = coeffs.shape[1]
@@ -422,15 +460,7 @@ class Smaccl(object):
         assert shp[0] == NBAND
         if (rtoa.ndim == 4) :
             NZ  = shp[1]
-            #NZ  = shp[-2]
         else : NZ=1
-
-
-        #NBLOOPd = self.copy_to_device('NBLOOPd', NBLOOP, np.uint32)
-        #XGRIDd  = self.copy_to_device('XGRIDd' , XGRID,  np.uint32)
-        #XBLOCKd = self.copy_to_device('XBLOCKd', XBLOCK, np.uint32)
-        #NBANDd  = self.copy_to_device('NBANDd' , NBAND,  np.uint32)
-        #NZd     = self.copy_to_device('NZd'    , NZ,     np.uint32)
 
         #output arrays
         '''

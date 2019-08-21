@@ -55,26 +55,21 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
 
 // loop on the 3rd dimension (remaining pixels)
     for (int ip=0; ip<XNZd; ip++) {
+        unsigned long int jj = idx + ip*M;
+        iAero = iaero[jj];
+        float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
 
 // loop on number of run necessary to compute some Jacobians with finite difference
         for (int ir=0; ir<NRUN; ir++) {
 
 // loop on the number of bands
             for (int ib=0; ib<XNBANDd; ib++) {
-
-//
                 unsigned long int ii = idx + ip*M + ib*M*XNZd;
-                unsigned long int jj = idx + ip*M;
-                iAero = iaero[jj];
                 unsigned long int kk = ib*NMOD+iAero;
-//if (gid0==0) {printf("2.. Processing smaccl !!!!  %08d %08d %08d %08d %08d %08d\n", XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd,M);
-//             printf("... %08d %08d %08d %08d %08d\n", ii, jj, idx, ip, ib);}
-//if (gid0<3) printf("... Processing smaccl !!!! %08d %08d %08d %08d %08d %08d %08d %08d %08d %08d %08d\n", ii, jj, idx, ip, ib, M, XNZd, XXGRIDd, XXBLOCKd,XNBANDd,XNBLOOPd);
-                float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
-                float taup550=taup550_[jj], pression=pression_[jj], rtoa=rtoa_[ii];
-                float dtau = dtau_rel * taup550;
-//
+                float taup550=taup550_[jj], pression=pression_[jj];
+                float rtoa=rtoa_[ii];
 
+                float dtau = dtau_rel * taup550;
                 if (ir==0) pression -= dpre;
                 if (ir==1) taup550  -= dtau;
 
@@ -86,9 +81,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 /*------ 1) air mass */
                 m =  1./us + 1./uv;
 
-
                 /*------  2) aerosol optical depth in the spectral band, taup  */
-//                taup = (ca[ib].a0taup) + (ca[ib].a1taup) * taup550 ;
                 taup = (ca[kk].a0taup) + (ca[kk].a1taup) * taup550 ;
 
                 /*------  3) gaseous transmissions (downward and upward paths)*/
@@ -463,55 +456,3 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
     } // main loop (ip)
 
 }
-
-
-//__kernel void smaccl1(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
-//                     __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
-//                     __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, __global float *Jtaup,
-//                     int NBLOOPd, int XGRIDd, int XBLOCKd, int NBANDd, int NZd)
-// 
-//{
-////*/
-//// current thread iudex
-//// TODO: const int idx = threadIdx.x + blockDim.x * blockIdx.x;
-//   int gid = get_global_id(0);
-//   int gs = get_global_size(0);
-//   
-//   printf("I am In smaccl !!!! %d / %d :-) \n", gid,gs);
-//
-//   printf("... %d / %d / %d / %d / %d / %d  :-) \n", gid, NBLOOPd,XGRIDd,XBLOCKd,NBANDd,NZd);
-//
-//    float a_temp;
-//    float b_temp;
-//    float c_temp;
-//    
-//	a_temp = tetas_[gid]; // my a element (by global ref)
-//	b_temp = tetav_[gid]; // my b element (by global ref)
-//	
-//	c_temp = a_temp+b_temp; // sum of my elements
-//	
-//	rsurf[gid] = c_temp; // store result in global memory
-//	Jrtoa[gid] = c_temp;
-//	Juo3[gid] = c_temp;
-//	Juh2o[gid] = c_temp;
-//	Jpre[gid] = c_temp;
-//	Jtaup[gid] = c_temp;
-//	
-//    printf("... %f \n", rsurf[gid]);                    
-//                        
-//   printf("I am OUT !!!! :-) \n");
-//   
-//}
-//
-////}// extern C
-//
-//__kernel void smaccltest()
-// 
-//{
-//
-//   int gid = get_global_id(0);
-//   
-//   printf("I am In !!!! %d :-) \n", gid);
-//
-//
-//}

@@ -62,7 +62,7 @@ def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_
         rtoa = (np.pi*ltoa)/(mus*f0)
         xdataset[rad_band] = (['y','x'], rtoa)
 
-    coeff_olci = get_smac_coeffs(smacfile['olci'], np.array(olci_idx))
+    coeff_olci = get_smac_coeffs(smacfile['olci'], np.array(olci_idx)-1)
 
     # band slstr
     if bands_slstr is None:
@@ -83,7 +83,7 @@ def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_
 
     SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
     if 4 in slstr_idx : slstr_idx.remove(4)
-    coeff_slstr = get_smac_coeffs(smacfile['slstr'], np.array(slstr_idx))
+    coeff_slstr = get_smac_coeffs(smacfile['slstr'], np.array(slstr_idx)-1)
 
     coeff_smac = np.concatenate([coeff_olci, coeff_slstr])
 
