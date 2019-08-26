@@ -1,18 +1,19 @@
 # encoding: utf-8
 
 import numpy as np
-from luts.luts import read_mlut, Idx
+from luts.luts import read_mlut, Idx, MLUT
 from smaccl import Smaccl
+from srtm import SRTM3
 import math
 import configparser
 from sys import argv
 from os.path import exists
-from c3s_io import load_olci_slstr, save_nc, create_nc
+from c3s_io import load_olci_slstr, load_msi, save_nc, create_nc
 from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model
 #from read_cams import load_cams
 
 
-def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
+def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
     fname = config['input']
     fileout = config['output']
@@ -43,12 +44,20 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
     platform= config['sensor'].split(sep='_')[0]
     sensors = config['sensor'].split(sep='_')[1:]
     smaccoef = {}
+    if 'resolution' in config.keys():
+        resolution = config['resolution']
+    else: resolution = '60'
+
     for s in sensors: smaccoef[s.lower()]=config['smaccoef_dir']+platform+'_'+s+'_smac_coeffs.npy'
-    chunksize = imsize//nbchunk
     #
     if 'S3' in platform : 
-        data, SIZE1, SIZE2, tab_band_internal, _, _ , coeffs, gl_size = load_olci_slstr(fname, smaccoef, 0, chunksize, platform=platform)
+        data, _,  _, _, _, _ , _, gl_size = load_olci_slstr(fname, smaccoef, 0, 1, platform=platform)
+    elif 'S2' in platform : 
+        data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
+                                                            platform=platform, resolution=resolution)
     out = create_nc(fileout, gl_size, data.attrs.items(), version)
+    if imsize < 0 : imsize = gl_size[0]
+    chunksize = imsize//nbchunk
 
     # TODO: test sur l'existance de données auxilliaires sinon utilisation 
     # de la climato et passage du 2eme bit de ac_process_flag a 1.
@@ -70,6 +79,9 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
         match = {'sulf':'SU', 'dust':'DU', 'oc':'OC', 'ssalt':'SS', 'bc':'BC'}
         if 'S3' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_olci_slstr(fname, smaccoef, chunkidx, chunksize, platform=platform)
+        elif 'S2' in platform : 
+            data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_msi(fname, smaccoef, chunkidx, chunksize, 
+                                                                                    platform=platform, resolution=resolution)
         data['ac_process_flag'] = (['y','x'], np.zeros(data['SZA'].data.shape, dtype='ubyte'))
 
         if data is None:
@@ -122,10 +134,14 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
                                         Idx(lat, round=False, fill_value='extrema'), 
                                         Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')
             #interpolate DEM and uncertainty to the image location and time
-            alt     = np.array(dem_lut['elev'][Idx(lat, round=False, fill_value='extrema'), 
+            if isinstance(dem, MLUT):
+                alt     = np.array(dem['elev'][Idx(lat, round=False, fill_value='extrema'), 
                                                Idx(lon, round=False, fill_value='extrema')]).astype(np.float32, order='C') 
-            Dalt    = np.array(dem_lut['Delev'][Idx(lat, round=False, fill_value='extrema'), 
+                Dalt    = np.array(dem['Delev'][Idx(lat, round=False, fill_value='extrema'), 
                                                 Idx(lon, round=False, fill_value='extrema')]).astype(np.float32, order='C')
+            elif isinstance(dem, SRTM3) :
+                alt     = dem.get(lat, lon).astype(np.float32, order='C')
+                Dalt    = np.zeros_like(alt)
 
             # flag large aot pixels
             flag  = (taup550 > config['taot'])
@@ -213,6 +229,7 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
             uo3_ext      = np.reshape(uo3_ext,     (Z,XBLOCK,XGRID),    order='C')
             taup550_ext  = np.reshape(taup550_ext, (Z,XBLOCK,XGRID),    order='C')
             pressure_ext = np.reshape(pressure_ext,(Z,XBLOCK,XGRID),    order='C')
+            iaero_ext    = np.reshape(iaero_ext   ,(Z,XBLOCK,XGRID),    order='C')
 
             (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(
                     coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
@@ -226,6 +243,7 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
             Juh2o_ext = np.reshape(Juh2o_ext,(NB,GSIZEXT), order='C')
             Jpre_ext  = np.reshape(Jpre_ext, (NB,GSIZEXT), order='C')
             Jtaup_ext = np.reshape(Jtaup_ext,(NB,GSIZEXT), order='C')
+
 
             rsurf  = np.zeros((NB,SIZE1,SIZE2))
             Drsurf = np.zeros((NB,SIZE1,SIZE2))
@@ -244,26 +262,26 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
                 Dpre   = np.zeros((NB,SIZE1,SIZE2))
                 Dtaup  = np.zeros((NB,SIZE1,SIZE2))
 
-            if INPUT:
-                Irtoa  = np.zeros((NB,SIZE1,SIZE2))
+            ancillary = None
+
+            if ANCILLARY:
                 Iuo3   = np.zeros((SIZE1,SIZE2)) + np.nan
                 Iuh2o  = np.zeros((SIZE1,SIZE2)) + np.nan
                 Ipre   = np.zeros((SIZE1,SIZE2)) + np.nan
                 Itaup  = np.zeros((SIZE1,SIZE2)) + np.nan
                 Ialt   = np.zeros((SIZE1,SIZE2)) + np.nan
+                Iaero  = np.zeros((SIZE1,SIZE2), dtype='int32')
                 Iuo3[good]   = uo3
                 Iuh2o[good]  = uh2o
                 Ipre[good]   = pressure
                 Itaup[good]  = taup550
                 Ialt[good]   = alt
+                Iaero[good]  = iaero
+                ancillary    = [Iuo3,Iuh2o,Itaup,Iaero,Ipre,Ialt]
 
             for i in range(NB):
                 inter[good]  = rsurf_ext[i,:GSIZE]
                 rsurf[i,:,:] = inter
-
-                if INPUT:
-                    inter[good] = rtoa[i,:]
-                    Irtoa[i,:,:]= inter
 
                 inter[good]  = abs(Jrtoa_ext[i,:GSIZE]  * rtoa_err[i,:]               ) # it is 0 because no input error
                 if BREAKPOINT: Drtoa[i,:,:] = inter
@@ -299,7 +317,7 @@ def process(config, dem_lut, S, BREAKPOINT=False, INPUT=False):
             del inter
             del stock
 
-        save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize)
+        save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, ancillary=ancillary)
 
     out.close()
 
@@ -326,11 +344,11 @@ def main(configfile):
         print('file "{}" does not exist'.format(config['input']))
         exit(0)
 
-    dem_lut = read_mlut(config['dem'])
+    dem = read_mlut(config['dem'])
 
     S = Smaccl('CPU')
 
-    process(config, dem_lut, S)
+    process(config, dem, S)
 
 if __name__=='__main__':
     

@@ -4,6 +4,9 @@ import numpy as np
 from smaccl import get_smac_coeffs
 from c3s_lib import SRF, date_to_float
 from datetime import datetime
+import sys
+sys.path.insert(0,'./eoread')
+from eoread.msi import Level1_MSI
 
 def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_olci=None, bands_slstr=None):
 
@@ -11,8 +14,12 @@ def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_
     _,_,_,wvl_central_slstr,_,_,_ = SRF(platform+'_SLSTR')
     wav = {'olci': wvl_central_olci, 'slstr': wvl_central_slstr}  
 
-    ymin = chunkidx*chunksize
-    ymax = ymin + chunksize
+    if (chunksize < 0):
+        ymin=0
+        ymax=-1
+    else:
+        ymin = chunkidx*chunksize
+        ymax = ymin + chunksize
     pfile = Dataset(fname)
     date = pfile.getncattr('start_date')
 
@@ -109,6 +116,73 @@ def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_
     return xdataset, SIZE1, SIZE2, tab_band_internal, central_wvl, sensor, coeff_smac, gl_size
 
 
+def load_msi(fname, smacfile, chunkidx, chunksize, 
+        platform='S2A', bands_msi=None, remove_blank=True, split=True, resolution='10'):
+
+    _,_,_,wvl_central_msi,_,_,_  = SRF(platform+'_MSI')
+    wav = {'msi': wvl_central_msi} 
+
+    pfile = Level1_MSI(fname, split=split, resolution=resolution)
+    date  = pfile.attrs['datetime']
+    bnames=[]
+    for ds in pfile:
+        if 'Rtoa' in ds:
+            bnames.append(ds)
+    if remove_blank:
+        good = np.where(pfile[bnames[0]] != 0.)
+        gslicex = slice(good[1][0], good[1][-1])
+        gslicey = slice(good[0][0], good[0][-1])
+        pfile   = pfile.sel(columns=gslicex, rows=gslicey)
+
+    if (chunksize < 0):
+        yslice=slice(None)
+    else:
+        ymin  = chunkidx*chunksize
+        ymax  = ymin + chunksize
+        yslice= slice(ymin,ymax)
+
+    lat = pfile['latitude'][yslice,:].astype('float32')
+    lon = pfile['longitude'][yslice,:].astype('float32')
+    cloud = np.zeros_like(lat)
+
+    vza = pfile['vza'][yslice,:]
+    vaa = pfile['vaa'][yslice,:]
+    sza = pfile['sza'][yslice,:]
+    saa = pfile['saa'][yslice,:]
+    if bands_msi is None:
+        msi_idx = list(np.arange(13)+1)
+    else:
+        msi_idx = bands_msi
+
+    xdataset = xa.Dataset({'SZA':(['y','x'], sza), 'SAA':(['y','x'], saa), 'VZA': (['y','x'], vza), 'VAA': (['y','x'], vaa), 
+                           'lat': (['y','x'], lat), 'lon': (['y','x'], lon), 'clm':(['y','x'], cloud)})
+
+    tab_band_internal = []
+    central_wvl = []
+    sensor = []
+
+    for idx in msi_idx:
+        rad_band = bnames[idx-1] 
+        tab_band_internal.append(rad_band)
+        central_wvl.append(wav['msi'][idx-1])
+        sensor.append('msi')
+        rtoa = pfile[rad_band][yslice,:]
+        xdataset[rad_band] = (['y','x'], rtoa)
+
+    coeff_smac = get_smac_coeffs(smacfile['msi'], np.array(msi_idx)-1)
+
+    dt = np.datetime64(date)
+    xdataset['mean-time'] = dt
+    xdataset['mean-time-dec'] = date_to_float(dt)
+
+    gl_size = pfile['latitude'].shape
+
+    pfile.close()
+    SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
+
+    return xdataset, SIZE1, SIZE2, tab_band_internal, central_wvl, sensor, coeff_smac, gl_size
+
+
 def create_nc(filename, gl_size, attrs, version):
     '''
     Start netCDF output file creation
@@ -131,15 +205,19 @@ def create_nc(filename, gl_size, attrs, version):
     out.production_centre = 'vito'
     out.version = version
 
-    width = gl_size[0]
-    height = gl_size[1]
+    width = gl_size[1]
+    height = gl_size[0]
+    #!!!!!!!!!
+    #width = gl_size[0]
+    #height = gl_size[1]
+    #!!!!!!!!!
     out.createDimension('height', height)
     out.createDimension('width', width)
 
     return out
 
 
-def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksize): 
+def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksize, ancillary=None): 
     '''
     Save outputs
     Inputs:
@@ -152,8 +230,12 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
         chunkidx: the number of the chunk to be saved
         chunksize: size of the chunk
    '''
-    ymin = chunkidx*chunksize
-    ymax = ymin + chunksize
+    if (chunksize < 0):
+        yslice=slice(None)
+    else:
+        ymin  = chunkidx*chunksize
+        ymax  = ymin + chunksize
+        yslice= slice(ymin,ymax)
 
     # test if some chunks have already been saved in the output file
     create  = not ('Lat' in out.variables)
@@ -164,54 +246,76 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
     #sds[ymin:ymax,:] = data['S4_radiance_an'].data[:,:]
 
     for idx in range(rsurf.shape[0]):
-        band = dataset_names[idx].replace('_radiance','')
+        band = dataset_names[idx].replace('_radiance','').replace('Rtoa_','')
         if create : sds = out.createVariable('TOC_{}'.format(band), 'f', ('height','width'), complevel=9)
         else: sds = out['TOC_{}'.format(band)]
-        sds[ymin:ymax, :] = rsurf[idx]
+        sds[yslice, :] = rsurf[idx]
         sds.Long_name = 'Top of Canopy Reflectance'
         sds.Unit = 'None'
         band = 'TOC_{} error'.format(band)
         if create: sds = out.createVariable(band, 'f', ('height','width'), complevel=9)
         else: sds = out[band]
-        sds[ymin:ymax,:] = Drsurf[idx]
+        sds[yslice,:] = Drsurf[idx]
         sds.Long_name = 'Uncertainty Top of Canopy Reflectance'
         sds.Unit = 'None'
     if create: sds = out.createVariable('Lat', 'f', ('height','width'), complevel=9)
     else: sds = out['Lat']
-    sds[ymin:ymax,:] = data['lat'].data
+    sds[yslice,:] = data['lat'].data
     sds.Unit = 'Degree'
     if create: sds = out.createVariable('Lon', 'f', ('height', 'width'), complevel=9)
     else: sds = out['Lon']
-    sds[ymin:ymax,:] = data['lon'].data
+    sds[yslice,:] = data['lon'].data
     sds.Unit = 'Degree'
     
     if create: sds = out.createVariable('SZA', 'f', ('height', 'width'), complevel=9)
     else: sds = out['SZA']
-    sds[ymin:ymax,:] = data['SZA'].data
+    sds[yslice,:] = data['SZA'].data
     sds.Unit = 'Degree'
     if create : sds = out.createVariable('SAA', 'f', ('height', 'width'), complevel=9)
     else: sds = out['SAA']
-    sds[ymin:ymax,:] = data['SAA'].data
+    sds[yslice,:] = data['SAA'].data
     sds.Unit = 'Degree'
     if create: sds = out.createVariable('VZA', 'f', ('height', 'width'), complevel=9)
     else: sds = out['VZA']
-    sds[ymin:ymax,:] = data['VZA'].data
+    sds[yslice,:] = data['VZA'].data
     sds.Unit = 'Degree'
     if create: sds = out.createVariable('VAA', 'f', ('height', 'width'), complevel=9)
     else: sds = out['VAA']
-    sds[ymin:ymax,:] = data['VAA'].data
+    sds[yslice,:] = data['VAA'].data
     sds.Unit = 'Degree'
 
-    #    if create: sds = out.createVariable('cloud_an', 'u2', ('height', 'width'), complevel=9)
-    if create: sds = out.createVariable('cloud_an', 'f', ('height', 'width'), complevel=9)
-    else: sds = out['cloud_an']
-    sds[ymin:ymax,:] = data['cloud_an']
-    if create: sds = out.createVariable('quality_flags', 'u4', ('height', 'width'), complevel=9)
-    else: sds = out['quality_flags']
-    sds[ymin:ymax,:] = data['quality_flags']#.data.astype('uint32')
-    if create: sds = out.createVariable('pixel_classif_flags', 'u2', ('height', 'width'), complevel=9)
-    else: sds = out['pixel_classif_flags']
-    sds[ymin:ymax,:] = data['pixel_classif_flags']#.data.astype('uint16')
-    if create: sds = out.createVariable('AC_process_flag', 'u1', ('height','width'), complevel=9)
-    else: sds = out['AC_process_flag']
-    sds[ymin:ymax,:] = data['ac_process_flag']#.data.astype('uint8')
+    if ancillary is not None:
+        if create: sds = out.createVariable('uo3', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['uo3']
+        sds[yslice,:] = ancillary[0]
+        if create: sds = out.createVariable('uh2o', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['uh2o']
+        sds[yslice,:] = ancillary[1]
+        if create: sds = out.createVariable('aot550', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['aot550']
+        sds[yslice,:] = ancillary[2]
+        if create: sds = out.createVariable('iaer', 'u4', ('height', 'width'), complevel=9)
+        else: sds = out['iaer']
+        sds[yslice,:] = ancillary[3]
+        if create: sds = out.createVariable('pressure', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['pressure']
+        sds[yslice,:] = ancillary[4]
+        if create: sds = out.createVariable('alt', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['alt']
+        sds[yslice,:] = ancillary[5]
+
+
+    create2  = 'cloud_an' in data.variables
+    if create2 : 
+        if create: sds = out.createVariable('cloud_an', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['cloud_an']
+        sds[yslice,:] = data['cloud_an']
+        if create: sds = out.createVariable('quality_flags', 'u4', ('height', 'width'), complevel=9)
+        else: sds = out['quality_flags']
+        sds[yslice,:] = data['quality_flags']#.data.astype('uint32')
+        if create: sds = out.createVariable('pixel_classif_flags', 'u2', ('height', 'width'), complevel=9)
+        else: sds = out['pixel_classif_flags']
+        sds[yslice,:] = data['pixel_classif_flags']#.data.astype('uint16')
+        if create: sds = out.createVariable('AC_process_flag', 'u1', ('height','width'), complevel=9)
+        else: sds = out['AC_process_flag']
+        sds[yslice,:] = data['ac_process_flag']#.data.astype('uint8')
