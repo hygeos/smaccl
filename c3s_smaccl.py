@@ -8,7 +8,7 @@ import math
 import configparser
 from sys import argv
 from os.path import exists
-from c3s_io import load_olci_slstr, load_msi, save_nc, create_nc
+from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc
 from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model
 #from read_cams import load_cams
 
@@ -51,7 +51,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     for s in sensors: smaccoef[s.lower()]=config['smaccoef_dir']+platform+'_'+s+'_smac_coeffs.npy'
     #
     if 'S3' in platform : 
-        data, _,  _, _, _, _ , _, gl_size = load_olci_slstr(fname, smaccoef, 0, 1, platform=platform)
+        data, _,  _, _, _, _ , _, gl_size = load_olci_slstr(fname, smaccoef, 0,  1, platform=platform)
+    elif 'LANDSAT' in platform : 
+        data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_oli(fname, smaccoef, 0, -1, platform=platform)
     elif 'S2' in platform : 
         data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
                                                             platform=platform, resolution=resolution)
@@ -79,6 +81,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         match = {'sulf':'SU', 'dust':'DU', 'oc':'OC', 'ssalt':'SS', 'bc':'BC'}
         if 'S3' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_olci_slstr(fname, smaccoef, chunkidx, chunksize, platform=platform)
+        elif 'LANDSAT' in platform : 
+            data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_oli(fname, smaccoef, chunkidx, chunksize, platform=platform)
         elif 'S2' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_msi(fname, smaccoef, chunkidx, chunksize, 
                                                                                     platform=platform, resolution=resolution)

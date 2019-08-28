@@ -7,6 +7,7 @@ from datetime import datetime
 import sys
 sys.path.insert(0,'./eoread')
 from eoread.msi import Level1_MSI
+from eoread.landsat8_oli import Level1_L8_OLI
 
 def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_olci=None, bands_slstr=None):
 
@@ -170,6 +171,73 @@ def load_msi(fname, smacfile, chunkidx, chunksize,
         xdataset[rad_band] = (['y','x'], rtoa)
 
     coeff_smac = get_smac_coeffs(smacfile['msi'], np.array(msi_idx)-1)
+
+    dt = np.datetime64(date)
+    xdataset['mean-time'] = dt
+    xdataset['mean-time-dec'] = date_to_float(dt)
+
+    gl_size = pfile['latitude'].shape
+
+    pfile.close()
+    SIZE1, SIZE2 = xdataset[tab_band_internal[0]].shape
+
+    return xdataset, SIZE1, SIZE2, tab_band_internal, central_wvl, sensor, coeff_smac, gl_size
+
+
+def load_oli(fname, smacfile, chunkidx, chunksize, 
+        platform='LANDSAT8', bands_oli=None, remove_blank=True, split=True):
+
+    _,_,_,wvl_central_oli,_,_,_  = SRF(platform+'_OLI')
+    wav = {'oli': wvl_central_oli} 
+
+    pfile = Level1_L8_OLI(fname, split=split, l8_angles='./l8_angles/l8_angles')
+    date  = pfile.attrs['datetime']
+    bnames=[]
+    for ds in pfile:
+        if 'Rtoa' in ds:
+            bnames.append(ds)
+    if remove_blank:
+        good = np.where(pfile[bnames[0]] > 0)
+        gslicex = slice(good[1][0], good[1][-1])
+        gslicey = slice(good[0][0], good[0][-1])
+        pfile   = pfile.sel(columns=gslicex, rows=gslicey)
+
+    if (chunksize < 0):
+        yslice=slice(None)
+    else:
+        ymin  = chunkidx*chunksize
+        ymax  = ymin + chunksize
+        yslice= slice(ymin,ymax)
+
+    lat = pfile['latitude'][yslice,:].astype('float32')
+    lon = pfile['longitude'][yslice,:].astype('float32')
+    cloud = np.zeros_like(lat)
+
+    vza = pfile['vza'][yslice,:]
+    vaa = pfile['vaa'][yslice,:]
+    sza = pfile['sza'][yslice,:]
+    saa = pfile['saa'][yslice,:]
+    if bands_oli is None:
+        oli_idx = list(np.arange(7)+1)
+    else:
+        oli_idx = bands_oli
+
+    xdataset = xa.Dataset({'SZA':(['y','x'], sza), 'SAA':(['y','x'], saa), 'VZA': (['y','x'], vza), 'VAA': (['y','x'], vaa), 
+                           'lat': (['y','x'], lat), 'lon': (['y','x'], lon), 'clm':(['y','x'], cloud)})
+
+    tab_band_internal = []
+    central_wvl = []
+    sensor = []
+
+    for idx in oli_idx:
+        rad_band = bnames[idx-1] 
+        tab_band_internal.append(rad_band)
+        central_wvl.append(wav['oli'][idx-1])
+        sensor.append('oli')
+        rtoa = pfile[rad_band][yslice,:]
+        xdataset[rad_band] = (['y','x'], rtoa)
+
+    coeff_smac = get_smac_coeffs(smacfile['oli'], np.array(oli_idx)-1)
 
     dt = np.datetime64(date)
     xdataset['mean-time'] = dt
