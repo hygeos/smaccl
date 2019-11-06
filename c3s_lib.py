@@ -266,3 +266,48 @@ def closest_models(X, Xb):
 
     return np.sum((X-Xb)**2, axis=0).argsort(axis=0)[:10, :]
 
+def load_cams(filename):
+    grbs = pg.open(filename)
+    datasets = {'TQV':'Total column water vapour', 'T10M':'2 metre temperature', 'TO3':'GEMS Total column ozone','TOTEXTTAU':'Total Aerosol Optical Depth at 550nm','SLP':'Mean sea level pressure'}
+    ntimes = grbs.messages//len(datasets)
+
+    data, lat, lon = grbs.read()[0].data()
+    x,y = data.shape
+    grbs.rewind()
+
+    datas = {} 
+    for k, n in datasets.items():
+        grb= grbs.select(name=n)
+        datas[k] = np.zeros((ntimes, x, y), dtype='float')
+        times = []
+        for i, grb in enumerate(grb):
+            times.append(np.datetime64(grb.validDate+timedelta(hours=3*i)))
+            data, lat, lon = grb.data()
+            datas[k][i,:,:] = data[:,:]
+
+    times = (np.array(times)-np.datetime64('1980-01-01T00:00:00.000000000')).astype('float32')/1e9/60.
+
+    cams_lut = MLUT()
+    cams_lut.add_axis('time', times)
+    cams_lut.add_axis('lat', lat[:,0])
+    cams_lut.add_axis('lon', lon[0])
+
+    for k in datasets:
+        cams_lut.add_dataset(k, datas[k], axnames=['time','lat','lon'])
+
+    return cams_lut
+
+def set_ac_flag(aot, sza, vza, climato):
+    flag = np.zeros(aot.shape, dtype='int32')
+    flag[(aot<=.5)] = 0
+    flag[((aot>.5) & (aot<=1.))] = 2
+    flag[((aot>1.) & (aot<=1.5))] = 4
+    flag[(aot>1.5)] = 6
+
+    flag[(sza>65)] |= 8
+    flag[(vza>65)] |= 16
+
+    if climato:
+        flag |= 32
+
+    return flag

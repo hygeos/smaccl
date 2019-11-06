@@ -1,13 +1,83 @@
 from netCDF4 import Dataset
 import xarray as xa
 import numpy as np
-from smaccl import get_smac_coeffs
+from smaccl import get_smac_coeffs, type_coeff_reduced
 from c3s_lib import SRF, date_to_float
 from datetime import datetime
 import sys
 sys.path.insert(0,'./eoread')
 from eoread.msi import Level1_MSI
 from eoread.landsat8_oli import Level1_L8_OLI
+from os.path import basename
+
+def load_testcase_vito(fname, dirsmac, sensor):
+    data = Dataset(fname)
+
+    lat_axis = data['lat'][:]
+    lon_axis = data['lon'][:]
+    SIZE1 = len(lon_axis)
+    SIZE2 = len(lat_axis)
+    gl_size = (SIZE1, SIZE2)
+
+    sza = np.reshape(data['sza'][:], gl_size)
+    vza_vnir = np.reshape(data['vza_vnir'][:], gl_size)
+    vza_swir = np.reshape(data['vza_swir'][:], gl_size)
+    saa = np.reshape(data['saa'][:], gl_size)
+    vaa_vnir = np.reshape(data['vaa_vnir'][:], gl_size)
+    vaa_swir = np.reshape(data['vaa_swir'][:], gl_size)
+
+    lon, lat = np.meshgrid(lon_axis, lat_axis)
+
+    if sensor == 'AVHRR':
+        cloud = np.logical_not((np.reshape(data['sm'][:], gl_size).astype('int')&15 == 8)).astype('int')
+        sm = np.reshape(data['sm'], gl_size)
+        hour = basename(fname).split('_')[-5]
+        platform = basename(fname).split('_')[-2]
+        smacfile = '{}/{}_{:02d}_smac_coeffs.npy'.format(dirsmac, platform[:4], int(platform[4:]))
+        if int(platform[4:]) < 15:
+            bandnames = ['band1','band2']
+        else:
+            bandnames = ['band1','band2','band3']
+    elif sensor == 'PROBAV':
+        bandnames = ['band1','band2','band3','band4']
+        cloud = np.logical_not((np.reshape(data['SM'][:], gl_size).astype('int')&15 == 8)).astype('int')
+        sm = np.reshape(data['SM'], gl_size)
+        hour = basename(fname).split('_')[-4]
+        smacfile = '{}/PROBA-V_smac_coeffs.npy'.format(dirsmac)
+    elif sensor == 'VGT':
+        bandnames = ['band1','band2','band3','band4']
+        cloud = np.logical_not((np.reshape(data['sm'][:], gl_size).astype('int')&15 == 8)).astype('int')
+        sm = np.reshape(data['sm'], gl_size)
+        hour = str(datetime.strptime(data.time_coverage_start, '%Y/%m/%d %H:%M:%S') + (datetime.strptime(data.time_coverage_end, '%Y/%m/%d %H:%M:%S') - datetime.strptime(data.time_coverage_start, '%Y/%m/%d %H:%M:%S'))/2).split()[-1].replace(':','')
+        smacfile = '{}/VGT{}_smac_coeffs.npy'.format(dirsmac, data.sensor.split('-')[-1])
+
+    date = basename(fname).split('_')[2]
+    date = "{}-{}-{}".format(date[:4], date[4:6], date[6:8])
+    hour = "{}:{}:{}".format(hour[:2], hour[2:4], hour[4:6])
+    dt = np.datetime64('{}T{}'.format(date,hour))
+
+    xdataset = xa.Dataset({'SZA':(['y','x'], sza), 'SAA':(['y','x'], saa), 'VZA': (['y','x'], vza_vnir), 'VAA': (['y','x'], vaa_vnir), 'VAA_SWIR': (['y','x'], vaa_swir), 'VZA_SWIR': (['y','x'], vza_swir), 
+                           'lat': (['y','x'], lat), 'lon': (['y','x'], lon), 
+                           'clm':(['y','x'], cloud.astype('float32')), 'sm':(['y','x'], sm)}, 
+                           coords={'x':(['x'], np.array(lon_axis)), 'y':(['y'], np.array(lat_axis))})
+
+
+    for b in bandnames:
+        xdataset[b] = (['y','x'], np.reshape(data[b][:], gl_size))
+        berr = '{}_err'.format(b)
+        xdataset[berr] = (['y','x'], np.reshape(data[berr][:]*data[b][:]*.01, gl_size))
+
+    xdataset['mean-time'] = dt
+    xdataset['mean-time-dec'] = date_to_float(xdataset['mean-time'].data)
+
+    smacdata = np.load(smacfile)
+    coeffs = np.zeros((len(bandnames), smacdata.shape[1]), dtype=type_coeff_reduced, order='C')
+    for idx in range(len(bandnames)):
+        for i2, d in enumerate(smacdata[idx]):
+            coeffs[idx,i2] = d.tolist()[1:]
+
+    return xdataset, SIZE1, SIZE2, bandnames, coeffs, gl_size
+
 
 def load_olci_slstr(fname, smacfile, chunkidx, chunksize, platform='S3A', bands_olci=None, bands_slstr=None):
 
@@ -192,12 +262,15 @@ def load_oli(fname, smacfile, chunkidx, chunksize,
 
     pfile = Level1_L8_OLI(fname, split=split, l8_angles='./l8_angles/l8_angles')
     date  = pfile.attrs['datetime']
+    gl_size = (int(pfile['totalheight'].data), int(pfile['totalwidth'].data))
     bnames=[]
     for ds in pfile:
         if 'Rtoa' in ds:
             bnames.append(ds)
     if remove_blank:
         good = np.where(pfile[bnames[0]] > 0)
+        if len(good[0]) == 0:
+            return None, None, None, None, None, None, None, gl_size 
         gslicex = slice(good[1][0], good[1][-1])
         gslicey = slice(good[0][0], good[0][-1])
         pfile   = pfile.sel(columns=gslicex, rows=gslicey)
@@ -275,17 +348,14 @@ def create_nc(filename, gl_size, attrs, version):
 
     width = gl_size[1]
     height = gl_size[0]
-    #!!!!!!!!!
-    #width = gl_size[0]
-    #height = gl_size[1]
-    #!!!!!!!!!
+
     out.createDimension('height', height)
     out.createDimension('width', width)
 
     return out
 
 
-def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksize, ancillary=None): 
+def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksize, ancillary=None, sensor=None): 
     '''
     Save outputs
     Inputs:
@@ -307,11 +377,6 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
 
     # test if some chunks have already been saved in the output file
     create  = not ('Lat' in out.variables)
-
-    #create =  not('S4_an' in out.variables)
-    #if create: sds = out.createVariable('S4_an', 'f', ('height','width'), complevel=9)
-    #else: sds = out['S4_an']
-    #sds[ymin:ymax,:] = data['S4_radiance_an'].data[:,:]
 
     for idx in range(rsurf.shape[0]):
         band = dataset_names[idx].replace('_radiance','').replace('Rtoa_','')
@@ -343,14 +408,33 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
     else: sds = out['SAA']
     sds[yslice,:] = data['SAA'].data
     sds.Unit = 'Degree'
-    if create: sds = out.createVariable('VZA', 'f', ('height', 'width'), complevel=9)
-    else: sds = out['VZA']
-    sds[yslice,:] = data['VZA'].data
-    sds.Unit = 'Degree'
-    if create: sds = out.createVariable('VAA', 'f', ('height', 'width'), complevel=9)
-    else: sds = out['VAA']
-    sds[yslice,:] = data['VAA'].data
-    sds.Unit = 'Degree'
+    if sensor=='PROBAV':
+        if create: sds = out.createVariable('VZA_VNIR', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VZA_VNIR']
+        sds[yslice,:] = data['VZA'].data
+        sds.Unit = 'Degree'
+        if create: sds = out.createVariable('VAA_VNIR', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VAA_VNIR']
+        sds[yslice,:] = data['VAA'].data
+        sds.Unit = 'Degree'
+
+        if create: sds = out.createVariable('VZA_SWIR', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VZA_SWIR']
+        sds[yslice,:] = data['VZA_SWIR'].data
+        sds.Unit = 'Degree'
+        if create: sds = out.createVariable('VAA_SWIR', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VAA_SWIR']
+        sds[yslice,:] = data['VAA_SWIR'].data
+        sds.Unit = 'Degree'
+    else:
+        if create: sds = out.createVariable('VZA', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VZA']
+        sds[yslice,:] = data['VZA'].data
+        sds.Unit = 'Degree'
+        if create: sds = out.createVariable('VAA', 'f', ('height', 'width'), complevel=9)
+        else: sds = out['VAA']
+        sds[yslice,:] = data['VAA'].data
+        sds.Unit = 'Degree'
 
     if ancillary is not None:
         if create: sds = out.createVariable('uo3', 'f', ('height', 'width'), complevel=9)
@@ -372,6 +456,11 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
         else: sds = out['alt']
         sds[yslice,:] = ancillary[5]
 
+    # test mask
+    if create: sds = out.createVariable('sm', 'u4', ('height', 'width'), complevel=9)
+    else: sds = out['sm']
+    sds[yslice,:] = data['sm']
+    # end test
 
     create2  = 'cloud_an' in data.variables
     if create2 : 
@@ -387,3 +476,7 @@ def save_nc(out, data, rsurf, Drsurf, version, dataset_names, chunkidx, chunksiz
         if create: sds = out.createVariable('AC_process_flag', 'u1', ('height','width'), complevel=9)
         else: sds = out['AC_process_flag']
         sds[yslice,:] = data['ac_process_flag']#.data.astype('uint8')
+
+    if create: sds = out.createVariable('ac_flag', 'u4', ('height','width'), complevel=9)
+    else: sds = out['ac_flag']
+    sds[yslice,:] = data['ac_flag']

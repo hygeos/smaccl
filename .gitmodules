@@ -4,3 +4,9 @@
 [submodule "luts"]
 	path = luts
 	url = git@gitlab.com:hygeos/luts.git
+[submodule "eoread"]
+	path = eoread
+	url = git@gitlab.com:hygeos/eoread.git
+[submodule "runlib"]
+	path = runlib
+	url = git@gitlab.com:hygeos/runlib.git

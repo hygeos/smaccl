@@ -8,9 +8,8 @@ import math
 import configparser
 from sys import argv
 from os.path import exists
-from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc
-from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model
-#from read_cams import load_cams
+from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito
+from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, load_cams, set_ac_flag
 
 
 def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
@@ -28,9 +27,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     k_uh2o = config['k_uh2o']
     k_uo3 = config['k_uo3']
     k_p0 = config['k_p0']
-    #
-    #Etoa = config['etoa']
-    #ERtoa = config['ertoa'] 
     Etaup = config['etaup']
     ERtaup = config['ertaup']
     Euo3 = config['euo3']
@@ -38,7 +34,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     Euh2o = config['euh2o']
     ERuh2o = config['eruh2o']
     Epre = config['epre']
-    #ERpre = config['erpre']
     nbchunk = config['nbchunk']
     imsize  = config['imsize']
     platform= config['sensor'].split(sep='_')[0]
@@ -57,16 +52,23 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     elif 'S2' in platform : 
         data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
                                                             platform=platform, resolution=resolution)
+    elif 'VITO' in platform:
+        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, config['smaccoef_dir'], sensors[0])
+
+    if data is None:
+        return
     out = create_nc(fileout, gl_size, data.attrs.items(), version)
     if imsize < 0 : imsize = gl_size[0]
     chunksize = imsize//nbchunk
+    if imsize%nbchunk!=0:
+        chunksize +=1
 
     # TODO: test sur l'existance de données auxilliaires sinon utilisation 
     # de la climato et passage du 2eme bit de ac_process_flag a 1.
 
     if 'cams' in config.keys():
         print("ancillary CAMS")
-        #   merra_lut = load_cams(config['cams'])
+        merra_lut = load_cams(config['cams'])
     else:
         print('ancillary MERRA 2')
         # path to input ancillary MERRA 2 data
@@ -78,6 +80,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         faer       = config['faer']
 
     for chunkidx in range(nbchunk):
+        ancillary = None
         match = {'sulf':'SU', 'dust':'DU', 'oc':'OC', 'ssalt':'SS', 'bc':'BC'}
         if 'S3' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_olci_slstr(fname, smaccoef, chunkidx, chunksize, platform=platform)
@@ -86,18 +89,18 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         elif 'S2' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_msi(fname, smaccoef, chunkidx, chunksize, 
                                                                                     platform=platform, resolution=resolution)
-        data['ac_process_flag'] = (['y','x'], np.zeros(data['SZA'].data.shape, dtype='ubyte'))
 
         if data is None:
-            print("Image has no attributes")
-            return
-
-        # masking cloudy & out of orbit pixels and SZA above 90°
-        SM   = data['clm'].data
-        SZA  = data['SZA'].data
-        good = np.where((SM == 0) & (SZA < 90))
-        #data['S4_radiance_an'].data[~((SM==0)&(SZA<90))] = np.NaN
-        NB = len(tab_band_internal)
+            print("Image has empty")
+            good = [[],[]]
+        else:
+            data['ac_process_flag'] = (['y','x'], np.zeros(data['SZA'].data.shape, dtype='ubyte'))
+            data['ac_flag'] = (['y','x'], np.ones(data['SZA'].data.shape, dtype='uint32'))
+            # masking cloudy & out of orbit pixels and SZA above 90°
+            SM   = data['clm'].data
+            SZA  = data['SZA'].data
+            good = np.where((SM == 0) & (SZA < 90))
+            NB = len(tab_band_internal)
 
         if len(good[0]) == 0:
             print('totally cloudy chunk #{}'.format(chunkidx))
@@ -105,7 +108,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             Drsurf = np.zeros((NB,SIZE1,SIZE2)) + np.NaN
 
         else:
-            merra_lut = pre_merra2(merra_aerosol, merra_ptwo)
+            if not('cams' in config.keys()):
+                merra_lut = pre_merra2(merra_aerosol, merra_ptwo)
             frac_aer_model = pre_aer_models(faer)
 
             # start with tie points
@@ -150,6 +154,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             # flag large aot pixels
             flag  = (taup550 > config['taot'])
             data['ac_process_flag'].data[good] |= flag.astype('u1')
+            climato = False
+            data['ac_flag'].data[good] = set_ac_flag(taup550, tetas, tetav, climato)
 
             # aerosol model computation
             xb = []
@@ -185,7 +191,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             rtoa_err    = np.zeros((NB, GSIZE), dtype='float32', order='C')
             for iband, band in enumerate(tab_band_internal):
                 rtoa[iband,:]     = data[band].data[good]
-                #rtoa_err = 0 because no input
+                band_err = '{}_err'.format(band)
+                rtoa_err[iband,:] = data[band_err].data[good] 
                 del data[band]
 
             Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
@@ -240,6 +247,33 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                     taup550_ext, pressure_ext, rtoa_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
+            if config['sensor']=='VITO_PROBAV':
+                tetav       = data['VZA_SWIR'].data[good].astype(np.float32, order='C')
+                tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+                tetav_ext[:GSIZE]    = tetav
+                tetav_ext    = np.reshape(tetav_ext,   (Z,XBLOCK,XGRID),    order='C')
+                phiv        = data['VAA_SWIR'].data[good].astype(np.float32, order='C')
+                phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+                phiv_ext[:GSIZE]     = phiv
+                phiv_ext     = np.reshape(phiv_ext,    (Z,XBLOCK,XGRID),    order='C')
+                rtoa_swir_ext     = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                rtoa_swir_ext[0,:GSIZE] = rtoa[-1,:]
+                rtoa_swir_ext     = np.reshape(rtoa_swir_ext,    (1,Z,XBLOCK,XGRID), order='C')
+                coeffs_swir = coeffs[-1]
+                coeffs_swir = np.reshape(coeffs_swir, (1, coeffs[-1].shape[0]))
+
+                (rsurf_swir_ext,Jrtoa_swir_ext,Juo3_swir_ext,Juh2o_swir_ext,Jpre_swir_ext,Jtaup_swir_ext) = S.run(
+                    coeffs_swir, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
+                    taup550_ext, pressure_ext, rtoa_swir_ext, iaero_ext, 
+                    XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
+
+                rsurf_ext[-1] = rsurf_swir_ext
+                Jrtoa_ext[-1] = Jrtoa_swir_ext
+                Juo3_ext[-1] = Juo3_swir_ext
+                Juh2o_ext[-1] = Juh2o_swir_ext
+                Jpre_ext[-1] = Jpre_swir_ext
+                Jtaup_ext[-1] = Jtaup_swir_ext
+
             # Output arrays reshaping
             rsurf_ext = np.reshape(rsurf_ext,(NB,GSIZEXT), order='C')
             Jrtoa_ext = np.reshape(Jrtoa_ext,(NB,GSIZEXT), order='C')
@@ -247,7 +281,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             Juh2o_ext = np.reshape(Juh2o_ext,(NB,GSIZEXT), order='C')
             Jpre_ext  = np.reshape(Jpre_ext, (NB,GSIZEXT), order='C')
             Jtaup_ext = np.reshape(Jtaup_ext,(NB,GSIZEXT), order='C')
-
 
             rsurf  = np.zeros((NB,SIZE1,SIZE2))
             Drsurf = np.zeros((NB,SIZE1,SIZE2))
@@ -266,7 +299,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 Dpre   = np.zeros((NB,SIZE1,SIZE2))
                 Dtaup  = np.zeros((NB,SIZE1,SIZE2))
 
-            ancillary = None
 
             if ANCILLARY:
                 Iuo3   = np.zeros((SIZE1,SIZE2)) + np.nan
@@ -321,7 +353,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             del inter
             del stock
 
-        save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, ancillary=ancillary)
+        save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, ancillary=ancillary, sensor=sensors[0])
 
     out.close()
 
@@ -348,11 +380,13 @@ def main(configfile):
         print('file "{}" does not exist'.format(config['input']))
         exit(0)
 
-    dem = read_mlut(config['dem'])
+    dem = SRTM3(directory=config['dem'], missing=0.0)
 
     S = Smaccl('CPU')
 
     process(config, dem, S)
+
+    print('end')
 
 if __name__=='__main__':
     
