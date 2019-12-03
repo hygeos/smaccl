@@ -7,10 +7,11 @@ import xarray
 sys.path.insert(0, '/home/did/RTC/SMART-G/')
 from smartg.atmosphere import rod, simps
 
-def SRF(sensor=None):
+def SRF(sensor=None, camera=None):
     '''
     Arguments:
-        one sensor name in the list return by SRF()
+        sensor : one sensor name in the list return by SRF()
+        camera : eventually a camera name (str) for a sensor
         
     returns:
         (wvn_limits, wvl_limits, fwhm, wvl_central, rod_effective, srf_wvl, rsrf)
@@ -22,6 +23,9 @@ def SRF(sensor=None):
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19, '+\
                'S2A_MSI, S2B_MSI, Terra_MISR, LANDSAT8_OLI'
+    if (sensor=='Proba-V' and camera is None) : 
+        print('{} sensor: camera needed : LEFT,RIGHT,CENTER,\ndefault CENTER'.format(sensor))
+        camera='CENTER'
     import pandas as pd
     xLimits = []
     fwhm    = []
@@ -132,12 +136,21 @@ def SRF(sensor=None):
     elif ('VGT' in sensor) or ('Proba' in sensor) :
         fsrfs  = glob('/rfs/proj/C3S/SRFs/VGT/VGT_SRF.XLSX')
         data   = pd.read_excel(fsrfs[0], sheet_name=sensor)
-        if sensor=='Proba-V' : data.rename(index=str, columns={"NIR  CENTER": "NIR CENTER"}, inplace=True)
+        if sensor=='Proba-V' : 
+            data.rename(index=str, columns={"NIR  CENTER": "NIR CENTER"}, inplace=True)
+            sensor2 = sensor+'-'+camera
+        else : sensor2 = sensor
         for band in ['BLUE','RED','NIR','SWIR']:
-            if sensor=='Proba-V' :
+            if sensor2=='Proba-V-CENTER' :
                 srf_wvl_     = np.array(data['wvl_{}'.format(band)].values)
                 srf_         = np.array(data['{} CENTER'.format(band)].values)
-            elif sensor=='VGT1' :
+            elif sensor2=='Proba-V-LEFT' :
+                srf_wvl_     = np.array(data['wvl_{}'.format(band)].values)
+                srf_         = np.array(data['{} LEFT'.format(band)].values)
+            elif sensor2=='Proba-V-RIGHT' :
+                srf_wvl_     = np.array(data['wvl_{}'.format(band)].values)
+                srf_         = np.array(data['{} RIGHT'.format(band)].values)
+            elif senso2=='VGT1' :
                 srf_wvl_     = np.array(data['wavelength'].values)*1e3
                 srf_         = np.array(data['{} {}'.format(band, sensor)].values)
             else :
