@@ -412,9 +412,10 @@ class Smaccl(object):
         #return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY, outputArray.nbytes)
         return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=buf)  # 
         
+
     def run(self, coeffs, tetas, tetav, phis, phiv,
-                uh2o, uo3, taup550, pression, rtoa, iaero,
-                XBLOCK=128, XGRID=128, NBLOOP=1):
+                uh2o, uo3, taup550, pression, rtoa, ref_surf_bar_downN, ref_surf_bar_upN, ref_surf_bar_barN, 
+                iaero, XBLOCK=128, XGRID=128, NBLOOP=1):
 
 #        print("....  testsmaccl1 class run ")
         
@@ -444,6 +445,21 @@ class Smaccl(object):
             - rtoa : TOA reflectance float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
                         and NB is the number of bands
 
+            - ref_surf_bar_downN : Surface reflectance convoluted with downward atmospheric radiance divided by surface
+                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
+                    float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
+                        and NB is the number of bands
+
+            - ref_surf_bar_upN : Surface reflectance convoluted with upward atmospheric radiance divided by surface
+                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
+                    float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
+                        and NB is the number of bands
+
+            - ref_surf_bar_barN : Surface reflectance convoluted twice with upward and downward atmospheric 
+                    radiance divided by surface
+                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
+                    float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
+                        and NB is the number of bands
             - XBLOCK and XGRID: control the number of blocks and grid size for
               the GPU execution
 
@@ -463,14 +479,6 @@ class Smaccl(object):
         else : NZ=1
 
         #output arrays
-        '''
-        rsurf   = self.createOutputArray(shp, dtype=np.float32)
-        Jrtoa   = self.createOutputArray(shp, dtype=np.float32)
-        Juo3    = self.createOutputArray(shp, dtype=np.float32)
-        Juh2o   = self.createOutputArray(shp, dtype=np.float32)
-        Jpre    = self.createOutputArray(shp, dtype=np.float32)
-        Jtaup   = self.createOutputArray(shp, dtype=np.float32)
-        '''
         rsurf = np.empty_like(rtoa)
         Jrtoa = np.empty_like(rtoa)
         Juo3  = np.empty_like(rtoa)
@@ -497,6 +505,9 @@ class Smaccl(object):
         cltaup550  = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=taup550)
         clpression = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=pression)
         clrtoa     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=rtoa)
+        clrsdN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_downN)
+        clrsuN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_upN)
+        clrsbN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_barN)
         claero     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=iaero)
         
         print(".... Smaccl: Smaccl  kernel (run) begin  ")
@@ -518,6 +529,9 @@ class Smaccl(object):
         Juh2od,
         Jpred,
         Jtaupd,
+        clrsdN,
+        clrsuN,
+        clrsbN,
         claero,
         np.int32(nMod),
         np.int32(NBLOOP),

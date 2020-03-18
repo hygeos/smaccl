@@ -6,7 +6,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                      __global float *Jtaup, 
                      __global float *ref_surf_bar_downN_, __global float *ref_surf_bar_upN_, __global float *ref_surf_bar_barN_,
                      __global int *iaero, int NMOD, 
-                    , int NBLOOPd, int NBANDd, int NZd)
+                    int NBLOOPd, int NBANDd, int NZd)
  
 {
     int gid0 = get_global_id(0);
@@ -203,7 +203,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 trans_atm = (tdirtetav*tdirtetas) +
                             (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
                             (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
-                            (tdiftetav*tdiftetas) * (ref_surf_bar_barN)
+                            (tdiftetav*tdiftetas) * (ref_surf_bar_barN);
                 rsurf[ii] = rsurf[ii] / ( (tg * trans_atm) + (rsurf[ii] * s) ) ;
   
                 /* Analytical Jacobian of surface reflectance vs toa reflectance*/

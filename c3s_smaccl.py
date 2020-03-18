@@ -195,11 +195,19 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 rtoa_err[iband,:] = data[band_err].data[good] 
                 del data[band]
 
+            # brdf arrays
+            ref_surf_bar_downN = np.ones_like(rtoa)
+            ref_surf_bar_upN   = np.ones_like(rtoa)
+            ref_surf_bar_barN  = np.ones_like(rtoa)
+
             Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
             GSIZEXT = Z * XBLOCK * XGRID
 
             # the \"ext\" suffix is for extended arrays, larger than the good pixels size, it is completed by NaN's\n",
             rtoa_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+            ref_surf_bar_downN_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+            ref_surf_bar_upN_ext       = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+            ref_surf_bar_barN_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
             taup550_ext  = np.zeros((GSIZEXT), dtype='float32') + np.NaN                                                                                                               
             uo3_ext      = np.zeros((GSIZEXT), dtype='float32') + np.NaN
             pressure_ext = np.zeros((GSIZEXT), dtype='float32') + np.NaN
@@ -212,6 +220,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
             for i in range(NB):
                 rtoa_ext[i,:GSIZE] = rtoa[i,:]
+                ref_surf_bar_downN_ext[i,:GSIZE] = ref_surf_bar_downN[i,:]
+                ref_surf_bar_upN_ext[i,:GSIZE]   = ref_surf_bar_upN[i,:]
+                ref_surf_bar_barN_ext[i,:GSIZE]  = ref_surf_bar_barN[i,:]
             #del rtoa
 
             taup550_ext[:GSIZE]  = taup550
@@ -231,6 +242,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             del phiv
 
             # Input arrays reshaping
+            ref_surf_bar_downN_ext = np.reshape(ref_surf_bar_downN_ext, (NB,Z,XBLOCK,XGRID), order='C')
+            ref_surf_bar_upN_ext   = np.reshape(ref_surf_bar_upN_ext,   (NB,Z,XBLOCK,XGRID), order='C')
+            ref_surf_bar_barN_ext  = np.reshape(ref_surf_bar_barN_ext,  (NB,Z,XBLOCK,XGRID), order='C')
             rtoa_ext     = np.reshape(rtoa_ext,    (NB,Z,XBLOCK,XGRID), order='C')
             tetas_ext    = np.reshape(tetas_ext,   (Z,XBLOCK,XGRID),    order='C')
             tetav_ext    = np.reshape(tetav_ext,   (Z,XBLOCK,XGRID),    order='C')
@@ -244,7 +258,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
             (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(
                     coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
-                    taup550_ext, pressure_ext, rtoa_ext, iaero_ext, 
+                    taup550_ext, pressure_ext, rtoa_ext, ref_surf_bar_downN_ext,
+                    ref_surf_bar_upN_ext, ref_surf_bar_barN_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
             if config['sensor']=='VITO_PROBAV':
@@ -259,12 +274,24 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 rtoa_swir_ext     = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
                 rtoa_swir_ext[0,:GSIZE] = rtoa[-1,:]
                 rtoa_swir_ext     = np.reshape(rtoa_swir_ext,    (1,Z,XBLOCK,XGRID), order='C')
+                #brdf arrays
+                ref_surf_swir_bar_downN_ext = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                ref_surf_swir_bar_downN_ext[0,:GSIZE] = ref_surf_bar_downN[-1,:]
+                ref_surf_swir_bar_downN_ext = np.reshape(ref_surf_swir_bar_downN_ext,(1,Z,XBLOCK,XGRID), order='C')
+                ref_surf_swir_bar_upN_ext   = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                ref_surf_swir_bar_upN_ext[0,:GSIZE] = ref_surf_bar_upN[-1,:]
+                ref_surf_swir_bar_upN_ext   = np.reshape(ref_surf_swir_bar_upN_ext,(1,Z,XBLOCK,XGRID), order='C')
+                ref_surf_swir_bar_barN_ext  = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                ref_surf_swir_bar_barN_ext[0,:GSIZE] = ref_surf_bar_barN[-1,:]
+                ref_surf_swir_bar_barN_ext  = np.reshape(ref_surf_swir_bar_barN_ext,(1,Z,XBLOCK,XGRID), order='C')
+                #
                 coeffs_swir = coeffs[-1]
                 coeffs_swir = np.reshape(coeffs_swir, (1, coeffs[-1].shape[0]))
 
                 (rsurf_swir_ext,Jrtoa_swir_ext,Juo3_swir_ext,Juh2o_swir_ext,Jpre_swir_ext,Jtaup_swir_ext) = S.run(
                     coeffs_swir, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
-                    taup550_ext, pressure_ext, rtoa_swir_ext, iaero_ext, 
+                    taup550_ext, pressure_ext, rtoa_swir_ext, ref_surf_swir_bar_downN_ext,
+                    ref_surf_swir_bar_upN_ext, ref_surf_swir_bar_barN_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
                 rsurf_ext[-1] = rsurf_swir_ext
@@ -380,7 +407,8 @@ def main(configfile):
         print('file "{}" does not exist'.format(config['input']))
         exit(0)
 
-    dem = SRTM3(directory=config['dem'], missing=0.0)
+    #dem = SRTM3(directory=config['dem'], missing=0.0)
+    dem = read_mlut(config['dem'])
 
     S = Smaccl('CPU')
 
