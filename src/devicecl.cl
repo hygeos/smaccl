@@ -2,7 +2,10 @@
 
 __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
-                     __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, __global float *Jtaup, __global int *iaero, int NMOD
+                     __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
+                     __global float *Jtaup, 
+                     __global float *ref_surf_bar_downN_, __global float *ref_surf_bar_upN_, __global float *ref_surf_bar_barN_,
+                     __global int *iaero, int NMOD, 
                     , int NBLOOPd, int NBANDd, int NZd)
  
 {
@@ -41,6 +44,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float to3,th2o,to2, tco2;
     float tco, tno2,tch4;
     float ttetas,ttetav,ksiD;
+    float tdirtetas,tdirtetav,tdiftetas,tdiftetav,trans_atm;
     float atm_ref;
 
     float ak2, ak, e, f, dp, d, b, del, ww, ss, q1, q2, q3, c1, c2, cp1 ;
@@ -53,21 +57,24 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float ray_phase, ray_ref, aer_ref, aer_phase ;
     int iAero = 0;
 
-// loop on the 3rd dimension (remaining pixels)
+    // loop on the 3rd dimension (remaining pixels)
     for (int ip=0; ip<XNZd; ip++) {
         unsigned long int jj = idx + ip*M;
         iAero = iaero[jj];
         float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
 
-// loop on number of run necessary to compute some Jacobians with finite difference
+         // loop on number of run necessary to compute some Jacobians with finite difference
         for (int ir=0; ir<NRUN; ir++) {
 
-// loop on the number of bands
+            // loop on the number of bands
             for (int ib=0; ib<XNBANDd; ib++) {
                 unsigned long int ii = idx + ip*M + ib*M*XNZd;
                 unsigned long int kk = ib*NMOD+iAero;
                 float taup550=taup550_[jj], pression=pression_[jj];
                 float rtoa=rtoa_[ii];
+                float ref_surf_bar_downN = ref_surf_bar_downN_[ii];
+                float ref_surf_bar_upN = ref_surf_bar_upN_[ii];
+                float ref_surf_bar_barN = ref_surf_bar_barN_[ii];
 
                 float dtau = dtau_rel * taup550;
                 if (ir==0) pression -= dpre;
@@ -135,6 +142,13 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 Res_ray= (ca[kk].Resr1) + (ca[kk].Resr2) * taurz*ray_phase / (us*uv) +
                  (ca[kk].Resr3) * pow( (taurz*ray_phase/(us*uv)),2);
 
+                /*--------9b) Direct and scattering transmssions*/
+                tautot=taup+taurz;
+                tdirtetas = exp(-tautot/us);
+                tdirtetav = exp(-tautot/uv);
+                tdiftetas = ttetas - tdirtetas;
+                tdiftetav = ttetav - tdirtetav;
+
                 /*------  10) aerosol atmospheric reflectance */
                 aer_phase = (ca[kk].a0P) + (ca[kk].a1P)*ksiD + (ca[kk].a2P)*ksiD*ksiD +(ca[kk].a3P)*pow(ksiD,3) + (ca[kk].a4P) * pow(ksiD,4);
 
@@ -168,11 +182,11 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 aer_ref = aer_ref / ( us*uv );
 
                 /*--------Residu Aerosol --------*/
-                Res_aer= ( (ca[kk].Resa1) + (ca[kk].Resa2) * ( taup * m *cksi ) + (ca[kk].Resa3) * pow( (taup*m*cksi ),2) ) + (ca[kk].Resa4) * pow( (taup*m*cksi),3);
+                Res_aer= ( (ca[kk].Resa1) + (ca[kk].Resa2) * ( taup * m *cksi ) + (ca[kk].Resa3) * pow( (taup*m*cksi ),2) ) 
+                         + (ca[kk].Resa4) * pow( (taup*m*cksi),3);
 
 
                 /*---------Residu 6s-----------*/
-                tautot=taup+taurz;
                 Res_6s= ( (ca[kk].Rest1) + (ca[kk].Rest2) * ( tautot * m *cksi )
                     + (ca[kk].Rest3) * pow( (tautot*m*cksi),2) ) + (ca[kk].Rest4) * pow( (tautot*m*cksi),3);
 
@@ -186,7 +200,11 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                  /* reflectance at surface */
                 /*------------------------*/
                 rsurf[ii] = rtoa - (atm_ref * tg) ;
-                rsurf[ii] = rsurf[ii] / ( (tg * ttetas * ttetav) + (rsurf[ii] * s) ) ;
+                trans_atm = (tdirtetav*tdirtetas) +
+                            (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
+                            (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
+                            (tdiftetav*tdiftetas) * (ref_surf_bar_barN)
+                rsurf[ii] = rsurf[ii] / ( (tg * trans_atm) + (rsurf[ii] * s) ) ;
   
                 /* Analytical Jacobian of surface reflectance vs toa reflectance*/
                 /*------------------------*/
@@ -454,5 +472,42 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
             } // main loop (ib)
         } // main loop (ir)
     } // main loop (ip)
+}
 
+
+
+/*########## Ross Thick Li-Sparse  ##############*/
+
+float F1_rtls(float ths, float thv, float phi ){  //  rossthick-lisparse, only F1
+    if (phi < 0.) phi += DEUXPI; 
+    if (phi > PI) phi = DEUXPI - phi; 
+    float cos_xi = cos(ths) * cos(thv) + sin(ths) * sin(thv) * cos(phi);
+    float xi = acos(cos_xi);
+    float mm = 1./cos(thv) + 1./cos(ths);
+    float tthv = tan(thv);
+    float tths = tan(ths);
+
+    float cos_t = 2./mm * sqrt(tthv*tthv + tths*tths - 2.*tthv*tths * cos(phi) + pow(tthv *tths * sin(phi),2) );
+    cos_t = fmin(cos_t, 1.F);
+    float t = acos(cos_t);
+    float sin_t = sin(t);
+    float big_O = mm*(t - sin_t*cos_t)/PI;
+            
+    // geometric kernel
+    float F1 = big_O-(1./cos(thv) + 1./cos(ths)) + (1. + cos_xi)/(cos(thv)*cos(ths))/2.;
+
+    return F1;
+}
+
+
+float F2_rtls(float ths, float thv, float phi ){  //  rossthick-lisparse, only F2
+    if (phi < 0.) phi += DEUXPI; 
+    if (phi > PI) phi = DEUXPI - phi; 
+    float cos_xi = cos(ths) * cos(thv) + sin(ths) * sin(thv) * cos(phi);
+    float xi = acos(cos_xi);
+
+    // volume-scattering kernel
+    float F2 = (((PI/2. -xi)*cos_xi + sin(xi))/(cos(thv) + cos(ths))) - PI/4.;
+
+    return F2;
 }

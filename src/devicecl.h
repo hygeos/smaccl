@@ -1,6 +1,8 @@
 #ifndef DEVICEOCL_H
 #define DEVICEOCL_H
-
+#define PI 3.1415927F
+#define DEUXPI 6.2831853F
+#define DEMIPI 1.5707963F
 /**********************************************************
 *
 *           deviceocl.h

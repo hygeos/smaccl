@@ -22,7 +22,7 @@ def SRF(sensor=None, camera=None):
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3A_SLSTR, S3B_SLSTR, '+\
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19, '+\
-               'S2A_MSI, S2B_MSI, Terra_MISR, LANDSAT8_OLI'
+               'S2A_MSI, S2B_MSI, LANDSAT8_OLI, Terra_MISR'
     if (sensor=='Proba-V' and camera is None) : 
         print('{} sensor: camera needed : LEFT,RIGHT,CENTER,\ndefault CENTER'.format(sensor))
         camera='CENTER'
@@ -150,7 +150,7 @@ def SRF(sensor=None, camera=None):
             elif sensor2=='Proba-V-RIGHT' :
                 srf_wvl_     = np.array(data['wvl_{}'.format(band)].values)
                 srf_         = np.array(data['{} RIGHT'.format(band)].values)
-            elif senso2=='VGT1' :
+            elif sensor2=='VGT1' :
                 srf_wvl_     = np.array(data['wavelength'].values)*1e3
                 srf_         = np.array(data['{} {}'.format(band, sensor)].values)
             else :
