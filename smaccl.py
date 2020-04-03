@@ -78,7 +78,19 @@ type_coeff = [
     ('Rest1',      'float32'), 
     ('Rest2',      'float32'), 
     ('Rest3',      'float32'), 
-    ('Rest4',      'float32')
+    ('Rest4',      'float32'),
+    ('f1d0',      'float32'),
+    ('f1d1',      'float32'),
+    ('f1d2',      'float32'),
+    ('f2d0',      'float32'),
+    ('f2d1',      'float32'),
+    ('f2d2',      'float32'),
+    ('f1b0',      'float32'),
+    ('f1b1',      'float32'),
+    ('f1b2',      'float32'),
+    ('f2b0',      'float32'),
+    ('f2b1',      'float32'),
+    ('f2b2',      'float32')
   ]
 
 
@@ -131,7 +143,19 @@ type_coeff_reduced = [
     ('Rest1',      'float32'), 
     ('Rest2',      'float32'), 
     ('Rest3',      'float32'), 
-    ('Rest4',      'float32')
+    ('Rest4',      'float32'),
+    ('f1d0',      'float32'),
+    ('f1d1',      'float32'),
+    ('f1d2',      'float32'),
+    ('f2d0',      'float32'),
+    ('f2d1',      'float32'),
+    ('f2d2',      'float32'),
+    ('f1b0',      'float32'),
+    ('f1b1',      'float32'),
+    ('f1b2',      'float32'),
+    ('f2b0',      'float32'),
+    ('f2b1',      'float32'),
+    ('f2b2',      'float32')
   ]
 
 type_coeff_old = [
@@ -414,7 +438,7 @@ class Smaccl(object):
         
 
     def run(self, coeffs, tetas, tetav, phis, phiv,
-                uh2o, uo3, taup550, pression, rtoa, ref_surf_bar_downN, ref_surf_bar_upN, ref_surf_bar_barN, 
+                uh2o, uo3, taup550, pression, rtoa, k1p, k2p,
                 iaero, XBLOCK=128, XGRID=128, NBLOOP=1):
 
 #        print("....  testsmaccl1 class run ")
@@ -445,21 +469,16 @@ class Smaccl(object):
             - rtoa : TOA reflectance float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
                         and NB is the number of bands
 
-            - ref_surf_bar_downN : Surface reflectance convoluted with downward atmospheric radiance divided by surface
-                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
+            - k1p :  k1/k0 coefficient ratio of the first RTLS kernel
+                     It is 0. for a lambertian surface. Same dimensions as rtoa:
                     float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
                         and NB is the number of bands
 
-            - ref_surf_bar_upN : Surface reflectance convoluted with upward atmospheric radiance divided by surface
-                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
+            - k2p :  k2/k0 coefficient ratio of the first RTLS kernel
+                     It is 0. for a lambertian surface. Same dimensions as rtoa:
                     float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
                         and NB is the number of bands
 
-            - ref_surf_bar_barN : Surface reflectance convoluted twice with upward and downward atmospheric 
-                    radiance divided by surface
-                    reflectance; It is 1. for a lambertian surface. Same dimensions as rtoa:
-                    float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
-                        and NB is the number of bands
             - XBLOCK and XGRID: control the number of blocks and grid size for
               the GPU execution
 
@@ -505,9 +524,8 @@ class Smaccl(object):
         cltaup550  = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=taup550)
         clpression = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=pression)
         clrtoa     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=rtoa)
-        clrsdN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_downN)
-        clrsuN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_upN)
-        clrsbN     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=ref_surf_bar_barN)
+        clk1p      = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=k1p)
+        clk2p      = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=k2p)
         claero     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=iaero)
         
         print(".... Smaccl: Smaccl  kernel (run) begin  ")
@@ -529,9 +547,8 @@ class Smaccl(object):
         Juh2od,
         Jpred,
         Jtaupd,
-        clrsdN,
-        clrsuN,
-        clrsbN,
+        clk1p,
+        clk2p,
         claero,
         np.int32(nMod),
         np.int32(NBLOOP),

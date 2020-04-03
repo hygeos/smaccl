@@ -324,3 +324,35 @@ def set_ac_flag(aot, sza, vza, climato):
         flag |= 32
 
     return flag
+
+
+def load_brdf(file_brdf):
+    return np.loadtxt(file_brdf)
+
+
+def F1_rtls(ths, thv, phi):   #  rossthick-lisparse, only F1
+    phi[phi<0] = phi[phi<0] + 2.*np.pi
+    phi[phi>np.pi] = 2.*np.pi - phi[phi>np.pi] 
+    cos_xi = np.cos(ths) * np.cos(thv) + np.sin(ths) * np.sin(thv) * np.cos(phi)    
+    mm     = 1./np.cos(thv) + 1./np.cos(ths)
+    cos_t  = 2./mm * np.sqrt(np.tan(thv)**2 + np.tan(ths)**2 - \
+             2*np.tan(thv)*np.tan(ths)*np.cos(phi) + (np.tan(thv)*np.tan(ths)*np.sin(phi))**2)
+    cos_t  = np.minimum(cos_t, 1.)
+    t      = np.arccos(cos_t)
+    sin_t  = np.sin(t)
+    big_O  = mm * (t -sin_t*cos_t)/np.pi            
+    # geometric kernel
+    F1     = big_O - (1./np.cos(thv) + 1./np.cos(ths)) + (1 + cos_xi)/(np.cos(thv)*np.cos(ths))/2.
+    
+    return F1
+
+
+def F2_rtls( ths, thv, phi ): #  rossthick-lisparse, only F2
+    phi[phi<0] = phi[phi<0] + 2.*np.pi
+    phi[phi>np.pi] = 2.*np.pi - phi[phi>np.pi] 
+    cos_xi = np.cos(ths) * np.cos(thv) + np.sin(ths) * np.sin(thv) * np.cos(phi)    
+    xi     = np.arccos(cos_xi)    
+    # volume-scattering kernel
+    F2 = (((np.pi/2. - xi)*cos_xi + np.sin(xi))/(np.cos(thv) + np.cos(ths))) - np.pi/4.
+    
+    return F2

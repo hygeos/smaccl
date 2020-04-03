@@ -30,8 +30,14 @@ typedef struct
    float Resr1, Resr2, Resr3;
    float Rest1,Rest2;
    float Rest3,Rest4;
+   float f1d0, f1d1, f1d2;
+   float f2d0, f2d1, f2d2;
+   float f1b0, f1b1, f1b2;
+   float f2b0, f2b1, f2b2;
 
   } coef_atmos ;
 
 #endif // DEVICEOCL_H
 
+float F1_rtls(float ths, float thv, float phi );  //  rossthick-lisparse, only F1
+float F2_rtls(float ths, float thv, float phi );  //  rossthick-lisparse, only F2

@@ -10,7 +10,7 @@ from eoread.msi import Level1_MSI
 from eoread.landsat8_oli import Level1_L8_OLI
 from os.path import basename
 
-def load_testcase_vito(fname, dirsmac, sensor):
+def load_testcase_vito(fname, dirsmac, smac_version, sensor):
     data = Dataset(fname)
 
     lat_axis = data['lat'][:]
@@ -33,7 +33,7 @@ def load_testcase_vito(fname, dirsmac, sensor):
         sm = np.reshape(data['sm'], gl_size)
         hour = basename(fname).split('_')[-5]
         platform = basename(fname).split('_')[-2]
-        smacfile = '{}/{}_{:02d}_smac_coeffs.npy'.format(dirsmac, platform[:4], int(platform[4:]))
+        smacfile = '{}/{}_{:02d}_smac_coeffs_v{}.npy'.format(dirsmac, platform[:4], int(platform[4:]), smac_version)
         if int(platform[4:]) < 15:
             bandnames = ['band1','band2']
         else:
@@ -43,13 +43,13 @@ def load_testcase_vito(fname, dirsmac, sensor):
         cloud = np.logical_not((np.reshape(data['SM'][:], gl_size).astype('int')&15 == 8)).astype('int')
         sm = np.reshape(data['SM'], gl_size)
         hour = basename(fname).split('_')[-4]
-        smacfile = '{}/PROBA-V_smac_coeffs.npy'.format(dirsmac)
+        smacfile = '{}/PROBA-V_smac_coeffs_v{}.npy'.format(dirsmac, smac_version)
     elif sensor == 'VGT':
         bandnames = ['band1','band2','band3','band4']
         cloud = np.logical_not((np.reshape(data['sm'][:], gl_size).astype('int')&15 == 8)).astype('int')
         sm = np.reshape(data['sm'], gl_size)
         hour = str(datetime.strptime(data.time_coverage_start, '%Y/%m/%d %H:%M:%S') + (datetime.strptime(data.time_coverage_end, '%Y/%m/%d %H:%M:%S') - datetime.strptime(data.time_coverage_start, '%Y/%m/%d %H:%M:%S'))/2).split()[-1].replace(':','')
-        smacfile = '{}/VGT{}_smac_coeffs.npy'.format(dirsmac, data.sensor.split('-')[-1])
+        smacfile = '{}/VGT{}_smac_coeffs_v{}.npy'.format(dirsmac, data.sensor.split('-')[-1], smac_version)
 
     date = basename(fname).split('_')[2]
     date = "{}-{}-{}".format(date[:4], date[4:6], date[6:8])

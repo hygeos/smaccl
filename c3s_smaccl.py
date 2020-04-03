@@ -10,6 +10,7 @@ from sys import argv
 from os.path import exists
 from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito
 from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, load_cams, set_ac_flag
+from c3s_lib import load_brdf
 
 
 def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
@@ -43,7 +44,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         resolution = config['resolution']
     else: resolution = '60'
 
-    for s in sensors: smaccoef[s.lower()]=config['smaccoef_dir']+platform+'_'+s+'_smac_coeffs.npy'
+    for s in sensors: smaccoef[s.lower()]=config['smaccoef_dir']+platform+'_'+s+'_smac_coeffs_v'+config['smaccoef_version']+'.npy'
     #
     if 'S3' in platform : 
         data, _,  _, _, _, _ , _, gl_size = load_olci_slstr(fname, smaccoef, 0,  1, platform=platform)
@@ -53,7 +54,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
                                                             platform=platform, resolution=resolution)
     elif 'VITO' in platform:
-        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, config['smaccoef_dir'], sensors[0])
+        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, 
+                                                                 config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
 
     if data is None:
         return
@@ -78,6 +80,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         merra_ptwo = config['merraptwo']
         # 3) Aerosols components fraction
         faer       = config['faer']
+
 
     for chunkidx in range(nbchunk):
         ancillary = None
@@ -196,18 +199,23 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 del data[band]
 
             # brdf arrays
-            ref_surf_bar_downN = np.ones_like(rtoa)
-            ref_surf_bar_upN   = np.ones_like(rtoa)
-            ref_surf_bar_barN  = np.ones_like(rtoa)
+            # Test for BRDF input data for correction
+            if 'brdf' in config.keys():
+                print("BRDF inputs for correction: {}".format(config['brdf']))
+                k_cst = load_brdf(config['brdf'])
+                k1p = np.ones_like(rtoa)*k_cst[:,0][:,None]
+                k2p = np.ones_like(rtoa)*k_cst[:,1][:,None]
+            else:
+                k1p = np.zeros_like(rtoa)
+                k2p = np.zeros_like(rtoa)
 
             Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
             GSIZEXT = Z * XBLOCK * XGRID
 
             # the \"ext\" suffix is for extended arrays, larger than the good pixels size, it is completed by NaN's\n",
             rtoa_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-            ref_surf_bar_downN_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-            ref_surf_bar_upN_ext       = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-            ref_surf_bar_barN_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+            k1p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
+            k2p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
             taup550_ext  = np.zeros((GSIZEXT), dtype='float32') + np.NaN                                                                                                               
             uo3_ext      = np.zeros((GSIZEXT), dtype='float32') + np.NaN
             pressure_ext = np.zeros((GSIZEXT), dtype='float32') + np.NaN
@@ -219,10 +227,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             iaero_ext    = np.zeros((GSIZEXT), dtype='int32')
 
             for i in range(NB):
-                rtoa_ext[i,:GSIZE] = rtoa[i,:]
-                ref_surf_bar_downN_ext[i,:GSIZE] = ref_surf_bar_downN[i,:]
-                ref_surf_bar_upN_ext[i,:GSIZE]   = ref_surf_bar_upN[i,:]
-                ref_surf_bar_barN_ext[i,:GSIZE]  = ref_surf_bar_barN[i,:]
+                rtoa_ext[i,:GSIZE]= rtoa[i,:]
+                k1p_ext[i,:GSIZE] = k1p[i,:]
+                k2p_ext[i,:GSIZE] = k2p[i,:]
             #del rtoa
 
             taup550_ext[:GSIZE]  = taup550
@@ -242,9 +249,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             del phiv
 
             # Input arrays reshaping
-            ref_surf_bar_downN_ext = np.reshape(ref_surf_bar_downN_ext, (NB,Z,XBLOCK,XGRID), order='C')
-            ref_surf_bar_upN_ext   = np.reshape(ref_surf_bar_upN_ext,   (NB,Z,XBLOCK,XGRID), order='C')
-            ref_surf_bar_barN_ext  = np.reshape(ref_surf_bar_barN_ext,  (NB,Z,XBLOCK,XGRID), order='C')
+            k1p_ext      = np.reshape(k1p_ext, (NB,Z,XBLOCK,XGRID), order='C')
+            k2p_ext      = np.reshape(k2p_ext, (NB,Z,XBLOCK,XGRID), order='C')
             rtoa_ext     = np.reshape(rtoa_ext,    (NB,Z,XBLOCK,XGRID), order='C')
             tetas_ext    = np.reshape(tetas_ext,   (Z,XBLOCK,XGRID),    order='C')
             tetav_ext    = np.reshape(tetav_ext,   (Z,XBLOCK,XGRID),    order='C')
@@ -258,16 +264,16 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
             (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(
                     coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
-                    taup550_ext, pressure_ext, rtoa_ext, ref_surf_bar_downN_ext,
-                    ref_surf_bar_upN_ext, ref_surf_bar_barN_ext, iaero_ext, 
+                    taup550_ext, pressure_ext, rtoa_ext, k1p_ext,
+                    k2p_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
             if config['sensor']=='VITO_PROBAV':
-                tetav       = data['VZA_SWIR'].data[good].astype(np.float32, order='C')
+                tetav        = data['VZA_SWIR'].data[good].astype(np.float32, order='C')
                 tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
                 tetav_ext[:GSIZE]    = tetav
                 tetav_ext    = np.reshape(tetav_ext,   (Z,XBLOCK,XGRID),    order='C')
-                phiv        = data['VAA_SWIR'].data[good].astype(np.float32, order='C')
+                phiv         = data['VAA_SWIR'].data[good].astype(np.float32, order='C')
                 phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
                 phiv_ext[:GSIZE]     = phiv
                 phiv_ext     = np.reshape(phiv_ext,    (Z,XBLOCK,XGRID),    order='C')
@@ -275,23 +281,20 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 rtoa_swir_ext[0,:GSIZE] = rtoa[-1,:]
                 rtoa_swir_ext     = np.reshape(rtoa_swir_ext,    (1,Z,XBLOCK,XGRID), order='C')
                 #brdf arrays
-                ref_surf_swir_bar_downN_ext = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
-                ref_surf_swir_bar_downN_ext[0,:GSIZE] = ref_surf_bar_downN[-1,:]
-                ref_surf_swir_bar_downN_ext = np.reshape(ref_surf_swir_bar_downN_ext,(1,Z,XBLOCK,XGRID), order='C')
-                ref_surf_swir_bar_upN_ext   = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
-                ref_surf_swir_bar_upN_ext[0,:GSIZE] = ref_surf_bar_upN[-1,:]
-                ref_surf_swir_bar_upN_ext   = np.reshape(ref_surf_swir_bar_upN_ext,(1,Z,XBLOCK,XGRID), order='C')
-                ref_surf_swir_bar_barN_ext  = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
-                ref_surf_swir_bar_barN_ext[0,:GSIZE] = ref_surf_bar_barN[-1,:]
-                ref_surf_swir_bar_barN_ext  = np.reshape(ref_surf_swir_bar_barN_ext,(1,Z,XBLOCK,XGRID), order='C')
+                k1p_swir_ext = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                k1p_swir_ext[0,:GSIZE] = k1p[-1,:]
+                k1p_swir_ext = np.reshape(k1p_swir_ext,(1,Z,XBLOCK,XGRID), order='C')
+                k2p_swir_ext = np.zeros((1, GSIZEXT), dtype='float32') + np.NaN
+                k2p_swir_ext[0,:GSIZE] = k2p[-1,:]
+                k2p_swir_ext = np.reshape(k2p_swir_ext,(1,Z,XBLOCK,XGRID), order='C')
                 #
                 coeffs_swir = coeffs[-1]
                 coeffs_swir = np.reshape(coeffs_swir, (1, coeffs[-1].shape[0]))
 
                 (rsurf_swir_ext,Jrtoa_swir_ext,Juo3_swir_ext,Juh2o_swir_ext,Jpre_swir_ext,Jtaup_swir_ext) = S.run(
                     coeffs_swir, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
-                    taup550_ext, pressure_ext, rtoa_swir_ext, ref_surf_swir_bar_downN_ext,
-                    ref_surf_swir_bar_upN_ext, ref_surf_swir_bar_barN_ext, iaero_ext, 
+                    taup550_ext, pressure_ext, rtoa_swir_ext, k1p_swir_ext,
+                    k2p_swir_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
                 rsurf_ext[-1] = rsurf_swir_ext

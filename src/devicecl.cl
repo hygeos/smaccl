@@ -4,7 +4,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
                      __global float *rsurf, __global float *Jrtoa, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
                      __global float *Jtaup, 
-                     __global float *ref_surf_bar_downN_, __global float *ref_surf_bar_upN_, __global float *ref_surf_bar_barN_,
+                     __global float *k1p_, __global float *k2p_,
                      __global int *iaero, int NMOD, 
                     int NBLOOPd, int NBANDd, int NZd)
  
@@ -72,9 +72,8 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 unsigned long int kk = ib*NMOD+iAero;
                 float taup550=taup550_[jj], pression=pression_[jj];
                 float rtoa=rtoa_[ii];
-                float ref_surf_bar_downN = ref_surf_bar_downN_[ii];
-                float ref_surf_bar_upN = ref_surf_bar_upN_[ii];
-                float ref_surf_bar_barN = ref_surf_bar_barN_[ii];
+                float k1p = k1p_[ii];
+                float k2p = k2p_[ii];
 
                 float dtau = dtau_rel * taup550;
                 if (ir==0) pression -= dpre;
@@ -200,6 +199,21 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                  /* reflectance at surface */
                 /*------------------------*/
                 rsurf[ii] = rtoa - (atm_ref * tg) ;
+                float ax1 = F1_rtls(tetas*cdr, tetav*cdr, dphi);
+                float ax2 = F2_rtls(tetas*cdr, tetav*cdr, dphi);
+                float f1_bar_down = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
+                float f2_bar_down = ca[kk].f2d0 + ca[kk].f2d1*ax1 + ca[kk].f2d2*ax2; 
+                float f1_bar_bar  = ca[kk].f1b0 + ca[kk].f1b1*ax1 + ca[kk].f1b2*ax2; 
+                float f2_bar_bar  = ca[kk].f2b0 + ca[kk].f2b1*ax1 + ca[kk].f2b2*ax2; 
+                float rs          =  (1. + k1p*ax1 + k2p*ax2);
+                ax1 = F1_rtls(tetav*cdr, tetas*cdr, M_PI-dphi);
+                ax2 = F2_rtls(tetav*cdr, tetas*cdr, M_PI-dphi);
+                float f1_bar_up   = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
+                float f2_bar_up   = ca[kk].f2d0 + ca[kk].f2d1*ax1 + ca[kk].f2d2*ax2; 
+                /**/
+                float ref_surf_bar_downN= (1. + k1p*f1_bar_down + k2p*f2_bar_down)/rs;
+                float ref_surf_bar_upN  = (1. + k1p*f1_bar_up   + k2p*f2_bar_up)  /rs;
+                float ref_surf_bar_barN = (1. + k1p*f1_bar_bar  + k2p*f2_bar_bar )/rs;
                 trans_atm = (tdirtetav*tdirtetas) +
                             (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
                             (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
@@ -482,7 +496,6 @@ float F1_rtls(float ths, float thv, float phi ){  //  rossthick-lisparse, only F
     if (phi < 0.) phi += DEUXPI; 
     if (phi > PI) phi = DEUXPI - phi; 
     float cos_xi = cos(ths) * cos(thv) + sin(ths) * sin(thv) * cos(phi);
-    float xi = acos(cos_xi);
     float mm = 1./cos(thv) + 1./cos(ths);
     float tthv = tan(thv);
     float tths = tan(ths);
