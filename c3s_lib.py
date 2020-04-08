@@ -234,7 +234,6 @@ def pre_brdf(fbrdf):
     # No BRDF good data -> 0. for Kp that means assuming lambertian surface in AC
     kp12[np.isnan(kp12)] = 0.
     brdf_lut.add_dataset('kp12', kp12, axnames=['lat','lon','nband','kernel_index'])
-    brdf_lut.save('/home/did/RTC/smaccl/kp12_lut.nc', overwrite=True)
 
     return brdf_lut
 

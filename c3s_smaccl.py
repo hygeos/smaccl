@@ -190,7 +190,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                                           Idx(lon, round=False, fill_value='extrema'),
                                           :, 1],[0,1],[1,0]).astype(np.float32, order='C')
                 del kp12_lut
-                print(k1p.shape, k1p.max(), k2p.max())
             else:
                 k1p = np.zeros((NB, GSIZE), dtype='float32', order='C')
                 k2p = np.zeros((NB, GSIZE), dtype='float32', order='C')
@@ -375,7 +374,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 if BREAKPOINT: Dpre[i,:,:]  = inter
                 stock       += inter[good]**2
 
-                inter[good]  = np.sqrt(stock/5.)
+                inter[good]  = np.sqrt(stock)
                 Drsurf[i,:,:]= inter
 
                 if BREAKPOINT:
