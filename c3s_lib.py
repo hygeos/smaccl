@@ -215,6 +215,30 @@ def dPsdz(z,p0,T, g=9.801, R=287.058, lam=-0.006):
     return g*Ps(z,p0,T, g=9.801, R=287.058, lam=-0.006)/(R*(T-lam*z))
 
 
+def pre_brdf(fbrdf):
+    '''
+        Read the BRDF level 3 parameters from the Albedo chain
+        and compute MLUT of normalized k1p=k1/k0 and k2p=k2/k0 BRDF coefficients
+    '''
+    brdf = xarray.open_dataset(fbrdf)
+    brdf_lut = MLUT()
+    # Add the good axes
+    brdf_lut.add_axis('lat',  brdf.LAT.data[::-1,0])
+    brdf_lut.add_axis('lon',  brdf.LON.data[0,:])
+    brdf_lut.add_axis('nband',brdf.NBAND.data)
+    brdf_lut.add_axis('kernel_index',np.arange(2))
+    kp12 = np.zeros((brdf_lut.axis('lat').size, brdf_lut.axis('lon').size,
+                     brdf_lut.axis('nband').size, 2))
+    kp12[:,:,:,0] = brdf['K012'].data[::-1,:,:,1]/brdf['K012'].data[::-1,:,:,0]
+    kp12[:,:,:,1] = brdf['K012'].data[::-1,:,:,2]/brdf['K012'].data[::-1,:,:,0]
+    # No BRDF good data -> 0. for Kp that means assuming lambertian surface in AC
+    kp12[np.isnan(kp12)] = 0.
+    brdf_lut.add_dataset('kp12', kp12, axnames=['lat','lon','nband','kernel_index'])
+    brdf_lut.save('/home/did/RTC/smaccl/kp12_lut.nc', overwrite=True)
+
+    return brdf_lut
+
+
 def pre_merra2(faero, fptwo):
     '''
         Read MERRA2 2 ancillary data files and store all information into a MLUT object for further use

@@ -10,7 +10,7 @@ from sys import argv
 from os.path import exists
 from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito
 from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, load_cams, set_ac_flag
-from c3s_lib import load_brdf
+from c3s_lib import load_brdf, pre_brdf
 
 
 def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
@@ -174,6 +174,26 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             xb = xb[:, :         ,np.newaxis]
             xm = xm[:, np.newaxis,         :]
             iaero = closest_model(xm, xb)
+
+            # brdf arrays
+            # Test for BRDF input data for correction
+            if 'brdf' in config.keys():
+                print("BRDF inputs for correction: {}".format(config['brdf']))
+                #k_cst = load_brdf(config['brdf'])
+                #k1p = np.ones_like(rtoa)*k_cst[:,0][:,None]
+                #k2p = np.ones_like(rtoa)*k_cst[:,1][:,None]
+                kp12_lut = pre_brdf((config['brdf']))
+                k1p    = np.moveaxis(kp12_lut['kp12'][Idx(lat, round=False, fill_value='extrema'), 
+                                          Idx(lon, round=False, fill_value='extrema'),
+                                          :, 0],[0,1],[1,0]).astype(np.float32, order='C')
+                k2p    = np.moveaxis(kp12_lut['kp12'][Idx(lat, round=False, fill_value='extrema'), 
+                                          Idx(lon, round=False, fill_value='extrema'),
+                                          :, 1],[0,1],[1,0]).astype(np.float32, order='C')
+                del kp12_lut
+                print(k1p.shape, k1p.max(), k2p.max())
+            else:
+                k1p = np.zeros((NB, GSIZE), dtype='float32', order='C')
+                k2p = np.zeros((NB, GSIZE), dtype='float32', order='C')
     
             del lat
             del lon
@@ -198,16 +218,6 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 rtoa_err[iband,:] = data[band_err].data[good] 
                 del data[band]
 
-            # brdf arrays
-            # Test for BRDF input data for correction
-            if 'brdf' in config.keys():
-                print("BRDF inputs for correction: {}".format(config['brdf']))
-                k_cst = load_brdf(config['brdf'])
-                k1p = np.ones_like(rtoa)*k_cst[:,0][:,None]
-                k2p = np.ones_like(rtoa)*k_cst[:,1][:,None]
-            else:
-                k1p = np.zeros_like(rtoa)
-                k2p = np.zeros_like(rtoa)
 
             Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
             GSIZEXT = Z * XBLOCK * XGRID
