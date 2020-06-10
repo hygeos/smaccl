@@ -1,7 +1,7 @@
 from netCDF4 import Dataset
 import xarray as xa
 import numpy as np
-from smaccl import get_smac_coeffs, type_coeff_reduced
+from smaccl import get_smac_coeffs, type_coeff_reduced, type_coeff
 from c3s_lib import SRF, date_to_float
 from datetime import datetime
 import sys
@@ -40,10 +40,20 @@ def load_testcase_vito(fname, dirsmac, smac_version, sensor):
             bandnames = ['band1','band2','band3']
     elif sensor == 'PROBAV':
         bandnames = ['band1','band2','band3','band4']
-        cloud = np.logical_not((np.reshape(data['SM'][:], gl_size).astype('int')&15 == 8)).astype('int')
-        sm = np.reshape(data['SM'], gl_size)
-        hour = basename(fname).split('_')[-4]
-        smacfile = '{}/PROBA-V_smac_coeffs_v{}.npy'.format(dirsmac, smac_version)
+        if 'sm' in data.variables:
+            varname = 'sm'
+            hour = basename(fname).split('_')[-5]
+        else:
+            varname = 'SM'
+            hour = basename(fname).split('_')[-4]
+        cloud = np.logical_not((np.reshape(data[varname][:], gl_size).astype('int')&15 == 8)).astype('int')
+        sm = np.reshape(data[varname], gl_size)
+        smacfile = '{}/PROBA-V_smac_coeffs.npy'.format(dirsmac)
+        if 'camera' in data.ncattrs():
+            camera = data.getncattr('camera')
+            cam = {'1':'LEFT', '2':'CENTER', '3':'RIGHT'}
+            smacfile = '{}/PROBA-V_{}_smac_coeffs_v{}.npy'.format(dirsmac, cam[camera], smac_version)
+
     elif sensor == 'VGT':
         bandnames = ['band1','band2','band3','band4']
         cloud = np.logical_not((np.reshape(data['sm'][:], gl_size).astype('int')&15 == 8)).astype('int')

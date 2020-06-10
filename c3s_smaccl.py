@@ -410,8 +410,8 @@ def main(configfile):
         print('file "{}" does not exist'.format(config['input']))
         exit(0)
 
-    #dem = SRTM3(directory=config['dem'], missing=0.0)
-    dem = read_mlut(config['dem'])
+    dem = SRTM3(directory=config['dem'], missing=0.0)
+    #dem = read_mlut(config['dem'])
 
     S = Smaccl('CPU')
 
