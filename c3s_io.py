@@ -48,7 +48,7 @@ def load_testcase_vito(fname, dirsmac, smac_version, sensor):
             hour = basename(fname).split('_')[-4]
         cloud = np.logical_not((np.reshape(data[varname][:], gl_size).astype('int')&15 == 8)).astype('int')
         sm = np.reshape(data[varname], gl_size)
-        smacfile = '{}/PROBA-V_smac_coeffs.npy'.format(dirsmac)
+        smacfile = '{}/PROBA-V_smac_coeffs_v{}.npy'.format(dirsmac, smac_version)
         if 'camera' in data.ncattrs():
             camera = data.getncattr('camera')
             cam = {'1':'LEFT', '2':'CENTER', '3':'RIGHT'}
