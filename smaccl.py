@@ -479,6 +479,8 @@ class Smaccl(object):
                     float32 arrays of dimension (XBLOCK,XGRID,Z, NB) where Z is 3rd dimension of pixels,
                         and NB is the number of bands
 
+            - iaero: aerosol model number  int (XBLOCK,XGRID,Z) where Z is 3rd dimensio of pixels
+
             - XBLOCK and XGRID: control the number of blocks and grid size for
               the GPU execution
 
