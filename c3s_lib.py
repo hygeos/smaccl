@@ -286,13 +286,42 @@ def pre_aer_models(faer):
     return frac_aer_model
 
 
+#def closest_model_vito(frac_aer_model, match):
+def closest_model_vito(X, Xb):
+    #nb_pixel = len(match['sulf'])
+    nb_pixel  = X.shape[1]
+    iaero = np.zeros(nb_pixel)
+    #nb_model = len(frac_aer_model['sulf'])
+    nb_model  = Xb.shape[1]
+    xm = np.zeros((5, 1))
+    #xb = np.zeros((5, nb_model))
+    #xb[0, :] = frac_aer_model['sulf']
+    #xb[1, :] = frac_aer_model['dust']
+    #xb[2, :] = frac_aer_model['oc']
+    #xb[3, :] = frac_aer_model['ssalt']
+    #xb[4, :] = frac_aer_model['bc']
+    for j in range(0, nb_pixel):
+        xm[0] = X[0,j]
+        xm[1] = X[1,j]
+        xm[2] = X[2,j]
+        xm[3] = X[3,j]
+        xm[4] = X[4,j]
+        #xm[1] = match['dust'][j]
+        #xm[2] = match['oc'][j]
+        #xm[3] = match['ssalt'][j]
+        #xm[4] = match['bc'][j]
+        iaero[j] = np.sum((np.tile(xm,nb_model) - Xb)**2,axis=0).argmin(axis=0)
+
+    return iaero
+
+
 def closest_model(X, Xb):
     '''
     return the closest model number compared to reference basis
     it is a distance minimization in a 5-dimensional space
     '''
 
-    return np.sum((X-Xb)**2, axis=0).argmin(axis=0)
+    return np.sum((X[:, np.newaxis, :]-Xb[:, :, np.newaxis])**2, axis=0).argmin(axis=0)
 
 
 def closest_models(X, Xb):
@@ -301,7 +330,8 @@ def closest_models(X, Xb):
     it is a distance minimization in a 5-dimensional space
     '''
 
-    return np.sum((X-Xb)**2, axis=0).argsort(axis=0)[:10, :]
+    return np.sum((X[:, np.newaxis, :]-Xb[:, :, np.newaxis])**2, axis=0).argsort(axis=0)[:10, :]
+
 
 def load_cams(filename):
     grbs = pg.open(filename)

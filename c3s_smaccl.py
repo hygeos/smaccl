@@ -9,7 +9,7 @@ import configparser
 from sys import argv
 from os.path import exists
 from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito
-from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, load_cams, set_ac_flag
+from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, closest_model_vito, load_cams, set_ac_flag
 from c3s_lib import load_brdf, pre_brdf
 
 
@@ -171,9 +171,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 xm.append(frac)
             xb = np.stack(xb, axis=0)
             xm = np.stack(xm, axis=0)
-            xb = xb[:, :         ,np.newaxis]
-            xm = xm[:, np.newaxis,         :]
-            iaero = closest_model(xm, xb)
+            #iaero = closest_model(xm, xb)
+            iaero = closest_model_vito(xm, xb)
 
             # brdf arrays
             # Test for BRDF input data for correction
