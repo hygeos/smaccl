@@ -174,8 +174,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 xm.append(frac)
             xb = np.stack(xb, axis=0)
             xm = np.stack(xm, axis=0)
-            #iaero = closest_model(xm, xb)
-            iaero = closest_model_vito(xm, xb)
+            iaero = closest_model(xm, xb)
+            #iaero = closest_model_vito(xm, xb)
 
             # brdf arrays
             # Test for BRDF input data for correction
