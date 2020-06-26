@@ -10,21 +10,31 @@ from eoread.msi import Level1_MSI
 from eoread.landsat8_oli import Level1_L8_OLI
 from os.path import basename
 
-def load_testcase_vito(fname, dirsmac, smac_version, sensor):
+def load_testcase_vito(fname, chunkidx, chunksize, dirsmac, smac_version, sensor):
+
+    if (chunksize < 0):
+        ymin=0
+        ymax=-1
+        yslice = slice(None,None)
+    else:
+        ymin = chunkidx*chunksize
+        ymax  = ymin + chunksize
+        yslice = slice(ymin,ymax)
+
     data = Dataset(fname)
 
-    lat_axis = data['lat'][:]
+    lat_axis = data['lat'][yslice]
     lon_axis = data['lon'][:]
-    SIZE1 = len(lon_axis)
-    SIZE2 = len(lat_axis)
+    SIZE2 = len(lon_axis)
+    SIZE1 = len(lat_axis)
     gl_size = (SIZE1, SIZE2)
 
-    sza = np.reshape(data['sza'][:], gl_size)
-    vza_vnir = np.reshape(data['vza_vnir'][:], gl_size)
-    vza_swir = np.reshape(data['vza_swir'][:], gl_size)
-    saa = np.reshape(data['saa'][:], gl_size)
-    vaa_vnir = np.reshape(data['vaa_vnir'][:], gl_size)
-    vaa_swir = np.reshape(data['vaa_swir'][:], gl_size)
+    sza =      data['sza'][yslice,:]
+    vza_vnir = data['vza_vnir'][yslice,:]
+    vza_swir = data['vza_swir'][yslice,:]
+    saa =      data['saa'][yslice,:]
+    vaa_vnir = data['vaa_vnir'][yslice,:]
+    vaa_swir = data['vaa_swir'][yslice,:]
 
     lon, lat = np.meshgrid(lon_axis, lat_axis)
 
@@ -40,14 +50,15 @@ def load_testcase_vito(fname, dirsmac, smac_version, sensor):
             bandnames = ['band1','band2','band3']
     elif sensor == 'PROBAV':
         bandnames = ['band1','band2','band3','band4']
-        if 'sm' in data.variables:
-            varname = 'sm'
-            hour = basename(fname).split('_')[-5]
-        else:
-            varname = 'SM'
-            hour = basename(fname).split('_')[-4]
-        cloud = np.logical_not((np.reshape(data[varname][:], gl_size).astype('int')&15 == 8)).astype('int')
-        sm = np.reshape(data[varname], gl_size)
+#        if 'sm' in data.variables:
+#            varname = 'sm'
+#            hour = basename(fname).split('_')[-5]
+#        else:
+#            varname = 'SM'
+#            hour = basename(fname).split('_')[-4]
+        hour = basename(fname).split('_')[-5]
+        cloud = np.logical_not((data[varname][yslice, :].astype('int')&15 == 8)).astype('int')
+        sm = data[varname][yslice, :]
         smacfile = '{}/PROBA-V_smac_coeffs_v{}.npy'.format(dirsmac, smac_version)
         if 'camera' in data.ncattrs():
             camera = data.getncattr('camera')
@@ -73,9 +84,9 @@ def load_testcase_vito(fname, dirsmac, smac_version, sensor):
 
 
     for b in bandnames:
-        xdataset[b] = (['y','x'], np.reshape(data[b][:], gl_size))
+        xdataset[b] = (['y','x'], np.reshape(data[b][yslice, :], gl_size))
         berr = '{}_err'.format(b)
-        xdataset[berr] = (['y','x'], np.reshape(data[berr][:]*data[b][:]*.01, gl_size))
+        xdataset[berr] = (['y','x'], np.reshape(data[berr][yslice, :]*data[b][yslice, :]*.01, gl_size))
 
     xdataset['mean-time'] = dt
     xdataset['mean-time-dec'] = date_to_float(xdataset['mean-time'].data)

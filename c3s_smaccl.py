@@ -54,7 +54,7 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
                                                             platform=platform, resolution=resolution)
     elif 'VITO' in platform:
-        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, 
+        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, 0, -1, 
                                                                  config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
 
     if data is None:
@@ -92,6 +92,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         elif 'S2' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_msi(fname, smaccoef, chunkidx, chunksize, 
                                                                                     platform=platform, resolution=resolution)
+        elif 'VITO' in platform:
+            data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, chunkidx, chunksize, 
+                                                                     config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
 
         if data is None:
             print("Image has empty")
