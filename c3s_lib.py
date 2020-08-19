@@ -6,6 +6,13 @@ import xarray
 from scipy.integrate import simps
 from scipy.constants import codata
 
+def isnumeric(x):
+    try:
+        float(x)
+        return True
+    except TypeError:
+        return False
+
 def FN2(lam):
     ''' depolarisation factor of N2
         lam : um
