@@ -155,7 +155,8 @@ def SRF(sensor=None, camera=None):
         return 'VGT1, VGT2, Proba-V, S3A_OLCI, S3B_OLCI, S3A_SLSTR, S3B_SLSTR, '+\
                'METOP_A, METOP_B, NOAA_07, NOAA_08, NOAA_09, NOAA_10, NOAA_11, '+\
                'NOAA_12, NOAA_13, NOAA_14, NOAA_15, NOAA_16, NOAA_17, NOAA_18, NOAA_19, '+\
-               'S2A_MSI, S2B_MSI, LANDSAT8_OLI, Terra_MISR'
+               'S2A_MSI, S2B_MSI, LANDSAT8_OLI, Terra_MISR, EOS_1_MODIS, EOS_2_MODIS, '+\
+               'JPSS_0_VIIRS, NOAA_20_VIIRS'
     if (sensor=='Proba-V' and camera is None) : 
         print('{} sensor: camera needed : LEFT,RIGHT,CENTER,\ndefault CENTER'.format(sensor))
         camera='CENTER'
@@ -314,6 +315,39 @@ def SRF(sensor=None, camera=None):
             central_wvl.append((srf_wvl__[srf_>0.5][-1] + srf_wvl__[srf_>0.5][0]) * 0.5)
             xLimits.append([1e7/(srf_wvl__.max()+1.), 1e7/(srf_wvl__.min()-1.)])
             srf_wvl.append(srf_wvl__ )
+            srf.append(srf_)
+            
+    elif ('MODIS' in sensor):
+        fsrfs = glob('/rfs/proj/C3S/SRFs/MODIS/rtcoef_'+sensor.lower()+'_srf*.txt')        
+        for f in np.sort(fsrfs):
+            fsrf         = np.loadtxt(f, skiprows=4)
+            srf_wvl_     = 1e7/fsrf[:,0][::-1]
+            srf_         = fsrf[:,1][::-1]
+            srf_ /= srf_.max() # normalize SRF
+            ok = srf_ > 0.005 # subset only minimum transmission
+            srf_ = srf_[ok]
+            srf_wvl_ = srf_wvl_[ok] 
+            fwhm .append(srf_wvl_[srf_>0.5][-1] - srf_wvl_[srf_>0.5][0])
+            central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
+            xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
+            srf_wvl.append(srf_wvl_ )
+            srf.append(srf_)
+            
+    elif ('VIIRS' in sensor):
+        fsrfs = glob('/rfs/proj/C3S/SRFs/VIIRS/rtcoef_'+sensor.lower()+'_srf*.txt') 
+        print(fsrfs)
+        for f in np.sort(fsrfs):
+            fsrf         = np.loadtxt(f, skiprows=4)
+            srf_wvl_     = 1e7/fsrf[:,0][::-1]
+            srf_         = fsrf[:,1][::-1]
+            srf_ /= srf_.max() # normalize SRF
+            ok = srf_ > 0.005 # subset only minimum transmission
+            srf_ = srf_[ok]
+            srf_wvl_ = srf_wvl_[ok] 
+            fwhm .append(srf_wvl_[srf_>0.5][-1] - srf_wvl_[srf_>0.5][0])
+            central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
+            xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
+            srf_wvl.append(srf_wvl_ )
             srf.append(srf_)
             
     # wavelengths intervals
