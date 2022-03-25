@@ -377,7 +377,7 @@ def SRF(sensor=None, camera=None):
     if sensor is None: 
         list_sensor_eumetsat = np.sort([f.split('/')[-1][7:-8].upper() for f in glob(dir_EUMETSAT_SRFs+'*tar')])
         list_sensor_special  = ['SENTINEL3_1_OLCI', 'SENTINEL3_2_OLCI', 'VGT1', 'VGT2', 'Proba-V',\
-                                'LANDSAT8_OLI', 'EOS_1_MISR']
+                                'LANDSAT8_OLI', 'EOS_1_MISR', 'ENVISAT_MERIS']
         a=''
         for s in list_sensor_eumetsat:
             if a=='': a=a+s
@@ -481,6 +481,26 @@ def SRF(sensor=None, camera=None):
             srf_ = srf_[ok]
             srf_wvl_ = srf_wvl_i[i,:]
             srf_wvl_ = srf_wvl_[ok]
+            fwhm .append(srf_wvl_[srf_>0.5][-1] - srf_wvl_[srf_>0.5][0])
+            central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
+            xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
+            srf_wvl.append(srf_wvl_ )
+            srf.append(srf_)
+
+    elif 'MERIS' in sensor:
+        platform = 'ENVISAT'
+        fsrfs    = pd.read_excel(dir_SRFs + 'MERIS/MERIS_NominalSRF_Model2004.xls', sheet_name='NominalSRF Model2004', skiprows=1)
+        for i in range(15):
+            if i==0 : st=''
+            else :  st='.'+str(i)
+            srf_wvl_ = np.array(fsrfs['wavelength' + st])
+            srf_wvl_ = srf_wvl_[np.isfinite(srf_wvl_)]
+            srf_     = np.array(fsrfs['SRF' + st])
+            srf_     = srf_[np.isfinite(srf_)]
+            srf_ /= srf_.max() # normalize SRF
+            ok = srf_ > 0.005 # subset only minimum transmission
+            srf_ = srf_[ok]
+            srf_wvl_ = srf_wvl_[ok] 
             fwhm .append(srf_wvl_[srf_>0.5][-1] - srf_wvl_[srf_>0.5][0])
             central_wvl.append((srf_wvl_[srf_>0.5][-1] + srf_wvl_[srf_>0.5][0]) * 0.5)
             xLimits.append([1e7/(srf_wvl_.max()+1.), 1e7/(srf_wvl_.min()-1.)])
