@@ -377,7 +377,7 @@ def SRF(sensor=None, camera=None):
     if sensor is None: 
         list_sensor_eumetsat = np.sort([f.split('/')[-1][7:-8].upper() for f in glob(dir_EUMETSAT_SRFs+'*tar')])
         list_sensor_special  = ['SENTINEL3_1_OLCI', 'SENTINEL3_2_OLCI', 'VGT1', 'VGT2', 'Proba-V',\
-                                'LANDSAT8_OLI', 'EOS_1_MISR', 'ENVISAT_MERIS']
+                                'LANDSAT_8_OLI', 'EOS_1_MISR', 'ENVISAT_MERIS']
         a=''
         for s in list_sensor_eumetsat:
             if a=='': a=a+s
@@ -397,7 +397,7 @@ def SRF(sensor=None, camera=None):
     srf_wvl = [] 
     srf     = []
 
-    if 'LANDSAT8' in sensor :
+    if 'LANDSAT' in sensor :
         platform = sensor[:8]
         fsrf   = dir_SRFs + 'OLI/LANDSAT8/Ball_BA_RSR.v1.2.xlsx'
         data   = pd.read_excel(fsrf, sheet_name='Band summary')
