@@ -246,7 +246,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 dtdu = (ca[kk].ah2o*ca[kk].nh2o/uh2o) * pow ( (uh2o *m) , (ca[kk].nh2o) ) * th2o;
                 //drdt = delta * ( (-atm_ref * tgp)  +
                 //            rp * (atm_ref * s * tg - ttt)/th2o * delta);
-                float drdt =  -rtoa * nu_inv*nu_inv * ttt/th2o;
+                drdt =  -rtoa * nu_inv*nu_inv * ttt/th2o;
                 Juh2o[ii]  = drdt * dtdu;
   
                 /* Finite difference Jacobians of surface reflectance vs pressure and taup550*/
@@ -512,7 +512,7 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
                 dtdu = (ca[kk].ah2o*ca[kk].nh2o/uh2o) * pow ( (uh2o *m) , (ca[kk].nh2o) ) * th2o;
                 //drdt = delta * ( (-atm_ref * tgp)  +
                 //             rp * (atm_ref * s * tg - ttt)/th2o * delta);
-                float drdt = rtoa[ii]/th2o;
+                drdt = rtoa[ii]/th2o;
                 Juh2o[ii]  = drdt * dtdu;
   
                 /* Finite difference Jacobians of surface reflectance vs pressure and taup550*/
