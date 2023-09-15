@@ -538,7 +538,7 @@ def SRF(sensor=None, camera=None):
     for w,s in zip(srf_wvl,srf):
         od = np.squeeze(rod(w*1e-3, np.array(400), 45., 0., 1013.25))
         ODR.append(simps(s*od, x=w)/simps(s,x=w))
-    return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR), srf_wvl, srf, name
+    return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR), srf_wvl, srf, np.array(name)
     
     
 def date_to_float(d, epoch=np.datetime64('1980-01-01T00:00:00.000000000')):

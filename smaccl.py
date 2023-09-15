@@ -30,7 +30,7 @@ dir_tmp = '/tmp/'
 os.environ['PYOPENCL_COMPILER_OUTPUT'] = '1'
 
 type_coeff = [
-    ('bandname',   'U25'),
+    ('bandname',   'U75'),
     ('ah2o',       'float32'),
     ('nh2o',       'float32'), 
     ('ao3',        'float32'), 
@@ -94,7 +94,7 @@ type_coeff = [
   ]
 
 type_coeff_v1 = [
-    ('bandname',   'U25'),
+    ('bandname',   'U75'),
     ('ah2o',       'float32'),
     ('nh2o',       'float32'), 
     ('ao3',        'float32'), 
@@ -147,7 +147,7 @@ type_coeff_v1 = [
 
 
 type_coeff_reduced = [
-#    ('bandname',  'U25'),
+#    ('bandname',  'U75'),
     ('ah2o',       'float32'),
     ('nh2o',       'float32'), 
     ('ao3',        'float32'), 
