@@ -91,11 +91,13 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 taup = (ca[kk].a0taup) + (ca[kk].a1taup) * taup550 ;
 
                 /*------  3) gaseous transmissions (downward and upward paths)*/
-                to3 = 1. ;
-                th2o= 1. ;
                 to2 = 1. ;
                 tco2= 1. ;
                 tch4= 1. ;
+                tno2= 1. ;
+                tco = 1. ;
+                to3 = 1. ;
+                th2o= 1. ;
 
                 uo2 = pow (Peq , (ca[kk].po2));
                 uco2= pow (Peq , (ca[kk].pco2));
