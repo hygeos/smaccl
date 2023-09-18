@@ -8,10 +8,25 @@ import math
 import configparser
 from sys import argv
 from os.path import exists
-from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito
+from c3s_io import load_olci_slstr, load_msi, load_oli, save_nc, create_nc, load_testcase_vito, get_info_testcase_vito, get_info_probav, load_probav, load_avhrr, load_viirs
 from c3s_lib import Ps, dPsdz, pre_merra2, pre_aer_models, closest_model, closest_model_vito, load_cams, set_ac_flag
 from c3s_lib import load_brdf, pre_brdf
 
+def modif_sm(data, rsurf, aot, config):
+    tocmin = config['tocmin']
+    tocmax = config['tocmax']
+    szamax = config['szamax']
+    aotmax = config['aotmax']
+
+    smnames = ['band1_sm','band2_sm','band3_sm','band4_sm']
+
+    for i, n in enumerate(smnames):
+        bad = ((tocmin>rsurf[i]) | (tocmax<rsurf[i]) | (data['SZA'].data>szamax) | (aot>aotmax))
+#        bad |= (np.isnan(rsurf[i]) | np.isnan(data['SZA'].data))
+        filter = np.zeros_like(data[n].values)+255
+        mask = 253 #bx1101
+        if np.sum(bad) != 0: filter[bad] = mask
+        data[n] &= filter # application du mask sur dataset sm.
 
 def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
@@ -37,8 +52,8 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     Epre = config['epre']
     nbchunk = config['nbchunk']
     imsize  = config['imsize']
-    platform= config['sensor'].split(sep='_')[0]
-    sensors = config['sensor'].split(sep='_')[1:]
+    platform= config['platform']
+    sensors = config['sensor'].split(sep='_')
     smaccoef = {}
     if 'resolution' in config.keys():
         resolution = config['resolution']
@@ -53,9 +68,17 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
     elif 'S2' in platform : 
         data, SIZE1, SIZE2, _, _, _ , _, gl_size = load_msi(fname, smaccoef, 0, -1, 
                                                             platform=platform, resolution=resolution)
-    elif 'VITO' in platform:
-        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, 0, -1, 
-                                                                 config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
+    elif sensors[0] == 'Proba-V':
+        data, gl_size = get_info_probav(fname)
+#        data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, 0, -1, 
+#                                                                 config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
+    elif sensors[0] == 'AVHRR':
+        bands = config['bands'].split()
+        data, _, gl_size = load_avhrr(fname, smaccoef, 0, -1, bands)
+
+    elif sensors[0] == 'VIIRS':
+        bands = config['bands'].split()
+        data, _, gl_size = load_viirs(fname, smaccoef, 0, -1, bands)
 
     if data is None:
         return
@@ -81,10 +104,11 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         # 3) Aerosols components fraction
         faer       = config['faer']
 
-
     for chunkidx in range(nbchunk):
+#        if chunkidx > 1: break
         ancillary = None
         match = {'sulf':'SU', 'dust':'DU', 'oc':'OC', 'ssalt':'SS', 'bc':'BC'}
+#        if 'SENTINEL3' in platform : 
         if 'S3' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_olci_slstr(fname, smaccoef, chunkidx, chunksize, platform=platform)
         elif 'LANDSAT' in platform : 
@@ -92,9 +116,18 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
         elif 'S2' in platform : 
             data, SIZE1, SIZE2, tab_band_internal, _, _, coeffs, gl_size = load_msi(fname, smaccoef, chunkidx, chunksize, 
                                                                                     platform=platform, resolution=resolution)
-        elif 'VITO' in platform:
-            data, SIZE1, SIZE2, tab_band_internal, coeffs, gl_size = load_testcase_vito(fname, chunkidx, chunksize, 
-                                                                     config['smaccoef_dir'], config['smaccoef_version'], sensors[0])
+        elif sensors[0] == 'Proba-V':
+            data, SIZE1, SIZE2, tab_band_internal, coeffs = load_probav(fname, chunkidx, chunksize, 
+                                                                     config['smaccoef_dir'], config['smaccoef_version']) #, sensors[0])
+        elif sensors[0] == 'AVHRR':
+            data, coeffs, gl_size = load_avhrr(fname, smaccoef, chunkidx, chunksize, bands)
+            SIZE1, SIZE2 = data['lat'].shape
+            tab_band_internal = bands.copy()
+        elif sensors[0] == 'VIIRS':
+            data, coeffs, gl_size = load_viirs(fname, smaccoef, chunkidx, chunksize, bands)
+            SIZE1, SIZE2 = data['lat'].shape
+            tab_band_internal = bands.copy()
+
 
         if data is None:
             print("Image has empty")
@@ -105,13 +138,15 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             # masking cloudy & out of orbit pixels and SZA above 90°
             SM   = data['clm'].data
             SZA  = data['SZA'].data
-            good = np.where((SM == 0) & (SZA < 90))
+#            good = np.where((SM == 0) & (SZA < 90))
+            good = np.where(SZA < 90) 
             NB = len(tab_band_internal)
 
         if len(good[0]) == 0:
             print('totally cloudy chunk #{}'.format(chunkidx))
             rsurf  = np.zeros((NB,SIZE1,SIZE2)) + np.NaN
             Drsurf = np.zeros((NB,SIZE1,SIZE2)) + np.NaN
+            taup550 = np.NaN
 
         else:
             if not('cams' in config.keys()):
@@ -166,16 +201,23 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             # aerosol model computation
             xb = []
             xm = []
-            for k,key in enumerate(frac_aer_model.keys()):
-                frac = merra_lut[match[key]+'_FRAC'][Idx(t0,  round=False, fill_value='extrema'),
-                                             Idx(lat, round=False, fill_value='extrema'), 
-                                             Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')              
-                xb.append(frac_aer_model[key])
-                xm.append(frac)
-            xb = np.stack(xb, axis=0)
-            xm = np.stack(xm, axis=0)
-            iaero = closest_model(xm, xb)
-            #iaero = closest_model_vito(xm, xb)
+
+            # OPTIONAEROFIXE
+            if 'aero_nmod' in config.keys():
+                nb_pixel = len(lat)
+                iaero = np.zeros(nb_pixel)
+                iaero[:] = config['aero_nmod']
+            else:
+                for k,key in enumerate(frac_aer_model.keys()):
+                    frac = merra_lut[match[key]+'_FRAC'][Idx(t0,  round=False, fill_value='extrema'),
+                                                 Idx(lat, round=False, fill_value='extrema'), 
+                                                 Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')              
+                    xb.append(frac_aer_model[key])
+                    xm.append(frac)
+                xb = np.stack(xb, axis=0)
+                xm = np.stack(xm, axis=0)
+                iaero = closest_model(xm, xb)
+                #iaero = closest_model_vito(xm, xb)
 
             # brdf arrays
             # Test for BRDF input data for correction
@@ -216,8 +258,9 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             for iband, band in enumerate(tab_band_internal):
                 rtoa[iband,:]     = data[band].data[good]
                 band_err = '{}_err'.format(band)
-                rtoa_err[iband,:] = data[band_err].data[good] 
-                del data[band]
+                if band_err in data.variables:
+                    rtoa_err[iband,:] = data[band_err].data[good] 
+#                del data[band]
 
 
             Z = int(math.ceil(float(GSIZE)/float(XBLOCK*XGRID)))
@@ -273,13 +316,14 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             pressure_ext = np.reshape(pressure_ext,(Z,XBLOCK,XGRID),    order='C')
             iaero_ext    = np.reshape(iaero_ext   ,(Z,XBLOCK,XGRID),    order='C')
 
+#            (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext,Tg_ext) = S.run(
             (rsurf_ext,Jrtoa_ext,Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = S.run(
                     coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
                     taup550_ext, pressure_ext, rtoa_ext, k1p_ext,
                     k2p_ext, iaero_ext, 
                     XBLOCK=XBLOCK, XGRID=XGRID, NBLOOP=NBLOOP)
 
-            if config['sensor']=='VITO_PROBAV':
+            if sensors[0] == 'Proba-V':
                 tetav        = data['VZA_SWIR'].data[good].astype(np.float32, order='C')
                 tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
                 tetav_ext[:GSIZE]    = tetav
@@ -299,9 +343,10 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 k2p_swir_ext[0,:GSIZE] = k2p[-1,:]
                 k2p_swir_ext = np.reshape(k2p_swir_ext,(1,Z,XBLOCK,XGRID), order='C')
                 #
-                coeffs_swir = coeffs[-1]
+                coeffs_swir = coeffs[-1]                
                 coeffs_swir = np.reshape(coeffs_swir, (1, coeffs[-1].shape[0]))
 
+#                (rsurf_swir_ext,Jrtoa_swir_ext,Juo3_swir_ext,Juh2o_swir_ext,Jpre_swir_ext,Jtaup_swir_ext,Tg_ext) = S.run(
                 (rsurf_swir_ext,Jrtoa_swir_ext,Juo3_swir_ext,Juh2o_swir_ext,Jpre_swir_ext,Jtaup_swir_ext) = S.run(
                     coeffs_swir, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
                     taup550_ext, pressure_ext, rtoa_swir_ext, k1p_swir_ext,
@@ -322,12 +367,16 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
             Juh2o_ext = np.reshape(Juh2o_ext,(NB,GSIZEXT), order='C')
             Jpre_ext  = np.reshape(Jpre_ext, (NB,GSIZEXT), order='C')
             Jtaup_ext = np.reshape(Jtaup_ext,(NB,GSIZEXT), order='C')
+#            Tg_ext = np.reshape(Tg_ext,(NB,GSIZEXT), order='C')
 
             rsurf  = np.zeros((NB,SIZE1,SIZE2))
             Drsurf = np.zeros((NB,SIZE1,SIZE2))
             inter  = np.zeros((SIZE1,SIZE2)) + np.nan
+            inter_drtoa  = np.zeros((SIZE1,SIZE2)) + np.nan
+            inter_dtaup  = np.zeros((SIZE1,SIZE2)) + np.nan
             stock  = np.zeros((GSIZE))
 
+#            Tg = np.zeros((NB,SIZE1,SIZE2))
             if BREAKPOINT:
                 Jrtoa  = np.zeros((NB,SIZE1,SIZE2))
                 Juo3   = np.zeros((NB,SIZE1,SIZE2))
@@ -357,14 +406,22 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
                 ancillary    = [Iuo3,Iuh2o,Itaup,Iaero,Ipre,Ialt]
 
             for i in range(NB):
+#                inter[good] = Tg_ext[i,:GSIZE]
+#                Tg[i,:,:] = inter
                 inter[good]  = rsurf_ext[i,:GSIZE]
                 rsurf[i,:,:] = inter
 
                 inter[good]  = abs(Jrtoa_ext[i,:GSIZE]  * rtoa_err[i,:]               ) # it is 0 because no input error
-                if BREAKPOINT: Drtoa[i,:,:] = inter
+#                if BREAKPOINT: Drtoa[i,:,:] = inter
+                if BREAKPOINT: 
+                    inter_drtoa[good] = abs(Jrtoa_ext[i,:GSIZE])
+                    Drtoa[i,:,:] = inter_drtoa
                 stock        = inter[good]**2
                 inter[good]  = abs(Jtaup_ext[i,:GSIZE] * (Etaup + ERtaup * taup550  ))
-                if BREAKPOINT: Dtaup[i,:,:] = inter
+#                if BREAKPOINT: Dtaup[i,:,:] = inter
+                if BREAKPOINT: 
+                    inter_dtaup[good] = abs(Jtaup_ext[i,:GSIZE])
+                    Dtaup[i,:,:] = inter_dtaup
                 stock       += inter[good]**2
                 inter[good]  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
                 if BREAKPOINT: Duo3[i,:,:]  = inter
@@ -393,8 +450,19 @@ def process(config, dem, S, BREAKPOINT=False, ANCILLARY=False):
 
             del inter
             del stock
-
-        save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, ancillary=ancillary, sensor=sensors[0])
+        aot = np.zeros((SIZE1,SIZE2)) + np.nan
+        aot[good] = taup550
+        ##### test sauvegarde des sm source
+#        for n in ['band1_sm','band2_sm','band3_sm','band4_sm']:
+#            new_band = '{}_old'.format(n)
+#            data[new_band] = data[n].copy()
+#        modif_sm(data, rsurf, aot, config)
+        if BREAKPOINT:
+#            save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, Tg, Drtoa=Drtoa, Dtaup=Dtaup, ancillary=ancillary, sensor=sensors[0], save_error=True)
+            save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, Drtoa=Drtoa, Dtaup=Dtaup, ancillary=ancillary, sensor=sensors[0], save_error=True)
+        else:
+#            save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, Tg, ancillary=ancillary, sensor=sensors[0], save_error=True)
+            save_nc(out, data, rsurf, Drsurf, version, tab_band_internal, chunkidx, chunksize, ancillary=ancillary, sensor=sensors[0], save_error=True)
 
     out.close()
 
@@ -411,6 +479,8 @@ def readConfig(configfile):
         config[k] = v
     for k,v in cf.items('Sensor'):
         config[k] = v
+    for k,v in cf.items('Output'):
+        config[k] = eval(v)
 
     return config
 
@@ -421,12 +491,12 @@ def main(configfile):
         print('file "{}" does not exist'.format(config['input']))
         exit(0)
 
-    dem = SRTM3(directory=config['dem'], missing=0.0)
-    #dem = read_mlut(config['dem'])
+#    dem = SRTM3(directory=config['dem'], missing=0.0)
+    dem = read_mlut(config['dem'])
 
     S = Smaccl('CPU')
 
-    process(config, dem, S)
+    process(config, dem, S, BREAKPOINT=config['jacobien'])
 
     print('end')
 
