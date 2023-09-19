@@ -194,8 +194,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 /*------  11) total atmospheric reflectance */
                 atm_ref = ray_ref - Res_ray + aer_ref - Res_aer + Res_6s;
 
-                /*-------- reflectance at toa*/
-
+                /* gaseous transmission */
                 tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
 
                  /* reflectance at surface */
@@ -225,20 +224,15 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 /* Analytical Jacobian of surface reflectance vs toa reflectance*/
                 /*------------------------*/
                 float ttt   = tg * trans_atm;
-                //float ttt   = tg * ttetas * ttetav;
                 float rp    = rtoa - atm_ref * tg;
                 float rps   = s * rp;
-                //float delta = 1./(rps + ttt);
                 float nu_inv = 1./(rps + ttt);
                 Jr[ii] = nu_inv *  nu_inv * ttt ;
-                //Jr[ii] = delta * ( delta - rps) ;
        
                 /* Analytical Jacobian of surface reflectance vs ozone column*/
                 /*------------------------*/
                 float tgp  = tg/to3;
                 float dtdu = (ca[kk].ao3*ca[kk].no3/uo3) * pow ( (uo3 *m) , (ca[kk].no3) ) * to3;
-                //float drdt = delta * ( (-atm_ref * tgp)  +
-                // rp * (atm_ref * s * tg - ttt)/to3 * delta);
                 float drdt =  -rtoa * nu_inv*nu_inv * ttt/to3;
                 Juo3[ii]  = drdt * dtdu;
 
@@ -246,8 +240,6 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                 /*------------------------*/
                 tgp  = tg/th2o;
                 dtdu = (ca[kk].ah2o*ca[kk].nh2o/uh2o) * pow ( (uh2o *m) , (ca[kk].nh2o) ) * th2o;
-                //drdt = delta * ( (-atm_ref * tgp)  +
-                //            rp * (atm_ref * s * tg - ttt)/th2o * delta);
                 drdt =  -rtoa * nu_inv*nu_inv * ttt/th2o;
                 Juh2o[ii]  = drdt * dtdu;
   
@@ -340,7 +332,6 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
                 unsigned long int kk = ib*NMOD+iAero;
                 float taup550=taup550_[jj], pression=pression_[jj];
                 float rsurf=rsurf_[ii];
-                //float rtoa=rtoa_[ii];
                 float k1p = k1p_[ii];
                 float k2p = k2p_[ii];
 
@@ -468,7 +459,6 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
                 /*-------- reflectance at toa*/
                 /*------------------------*/
                 /* Atmospheric scattering transmittance */
-                //rsurf[ii] = rtoa - (atm_ref * tg) ;
                 float ax1 = F1_rtls(tetas*cdr, tetav*cdr, dphi);
                 float ax2 = F2_rtls(tetas*cdr, tetav*cdr, dphi);
                 float f1_bar_down = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
@@ -488,36 +478,30 @@ __kernel void smaccl_dir(__global coef_atmos *ca, __global float *tetas_, __glob
                             (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
                             (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
                             (tdiftetav*tdiftetas) * (ref_surf_bar_barN);
-                //rsurf[ii] = rsurf[ii] / ( (tg * trans_atm) + (rsurf[ii] * s) ) ;
                 rtoa[ii] = (rsurf * trans_atm /(1. - rsurf*s)  + atm_ref) * tg ;
   
                 /* Analytical Jacobian of toa reflectance vs surface reflectance*/
                 /*------------------------*/
                 float ttt   = tg * trans_atm;
-                //float ttt   = tg * ttetas * ttetav;
                 float rps   = s * rsurf;
                 float nu_dir = 1./(1. - rps);
                 Jr[ii] = ttt * nu_dir*nu_dir;
        
-                /* Analytical Jacobian of surface reflectance vs ozone column*/
+                /* Analytical Jacobian of toa reflectance vs ozone column*/
                 /*------------------------*/
                 float tgp  = tg/to3;
                 float dtdu = (ca[kk].ao3*ca[kk].no3/uo3) * pow ( (uo3 *m) , (ca[kk].no3) ) * to3;
-                //float drdt = delta * ( (-atm_ref * tgp)  +
-                //             rp * (atm_ref * s * tg - ttt)/to3 * delta);
                 float drdt = rtoa[ii]/to3;
                 Juo3[ii]  = drdt * dtdu;
 
-                /* Analytical Jacobian of surface reflectance vs water vapour column*/
+                /* Analytical Jacobian of toa reflectance vs water vapour column*/
                 /*------------------------*/
                 tgp  = tg/th2o;
                 dtdu = (ca[kk].ah2o*ca[kk].nh2o/uh2o) * pow ( (uh2o *m) , (ca[kk].nh2o) ) * th2o;
-                //drdt = delta * ( (-atm_ref * tgp)  +
-                //             rp * (atm_ref * s * tg - ttt)/th2o * delta);
                 drdt = rtoa[ii]/th2o;
                 Juh2o[ii]  = drdt * dtdu;
   
-                /* Finite difference Jacobians of surface reflectance vs pressure and taup550*/
+                /* Finite difference Jacobians of toa reflectance vs pressure and taup550*/
                 /*------------------------*/
                 if (ir==0) Jpre[ii]  = -rtoa[ii];
                 if (ir==1) Jtaup[ii] = -rtoa[ii];
