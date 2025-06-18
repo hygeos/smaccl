@@ -5,8 +5,10 @@ from c3s_lib import set_ac_flag, closest_model_vito, pre_brdf, Ps, dPsdz
 import math
 import xarray as xa
 
+__module__    = "ISmaccl.py"    
+__version__   = "1.01.00"
 
-class ISmaccl():
+class ISmaccl(object):
     """
     ISmaccl is a wrapper for the Smaccl class that provides an interface
     for initializing and using the Smaccl library.
@@ -155,17 +157,17 @@ class ISmaccl():
         GSIZEXT = Z * self.XBLOCK * self.XGRID
 
         # the \"ext\" suffix is for extended arrays, larger than the good pixels size, it is completed by NaN's\n",
-        rtoa_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-        k1p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-        k2p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.NaN
-        taup550_ext  = np.zeros((GSIZEXT), dtype='float32') + np.NaN                                                                                                               
-        uo3_ext      = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        pressure_ext = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        uh2o_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        tetas_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        phis_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
-        phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.NaN
+        rtoa_ext     = np.zeros((NB, GSIZEXT), dtype='float32') + np.nan
+        k1p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.nan
+        k2p_ext      = np.zeros((NB, GSIZEXT), dtype='float32') + np.nan
+        taup550_ext  = np.zeros((GSIZEXT), dtype='float32') + np.nan                                                                                                               
+        uo3_ext      = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        pressure_ext = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        uh2o_ext     = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        tetas_ext    = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        tetav_ext    = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        phis_ext     = np.zeros((GSIZEXT), dtype='float32') + np.nan
+        phiv_ext     = np.zeros((GSIZEXT), dtype='float32') + np.nan
         iaero_ext    = np.zeros((GSIZEXT), dtype='int32')
 
         for i in range(NB):
