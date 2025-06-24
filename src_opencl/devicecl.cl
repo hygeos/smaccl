@@ -1,4 +1,4 @@
-#include "src/devicecl.h"
+#include "src_opencl/devicecl.h"
 
 __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,

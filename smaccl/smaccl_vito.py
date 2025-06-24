@@ -2,7 +2,7 @@
 
 import numpy as np
 from luts.luts import read_mlut, MLUT, Idx
-from smaccl import Smaccl#, Ps, dPsdz, get_smac_coeffs
+from smaccl.smaccl import Smaccl#, Ps, dPsdz, get_smac_coeffs
 import xarray
 from glob import glob
 import math

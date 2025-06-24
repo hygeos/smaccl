@@ -21,8 +21,10 @@ print(__module__ + ' ' + __version__)
 
 # set up directories
 dir_root = dirname(realpath(__file__))
-dir_src = join(dir_root, 'src/')
+print(dir_root)
+dir_src = join(dir_root, '../src_opencl/')
 dir_bin = join(dir_root, 'bin/')
+print("###### : ",dir_src)
 src_device = join(dir_src, 'devicecl.cl')
 binname =  join(dir_bin, 'smac.clbin')
 #dir_tmp = join(dir_root, 'tmp/')
@@ -429,6 +431,7 @@ class Smaccl(object):
 
             print(self.cldevice, " ; ", self.cldevice.version, " ; ", self.cldevice.driver_version)
             # load devicecl.cl
+            print(src_device)
             programFile = open(src_device, 'r')
             programText = programFile.read()
             program     = cl.Program(self.clcontext, programText)

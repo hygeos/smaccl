@@ -3,7 +3,7 @@ from glob import glob
 import h5py
 from luts.luts import MLUT
 import xarray
-from scipy.integrate import simps
+from scipy.integrate import simpson
 from scipy.constants import codata
 
 def isnumeric(x):
@@ -357,7 +357,7 @@ def SRF_old(sensor=None, camera=None):
     ODR = []
     for w,s in zip(srf_wvl,srf):
         od = np.squeeze(rod(w*1e-3, np.array(400), 45., 0., 1013.25))
-        ODR.append(simps(s*od, x=w)/simps(s,x=w))
+        ODR.append(simpson(s*od, x=w)/simpson(s,x=w))
     return np.array(xLimits), 1e7/np.array(xLimits)[:,::-1], fwhm, central_wvl, np.array(ODR), srf_wvl, srf
 
 
@@ -624,7 +624,7 @@ def pre_aer_models(faer):
     f = open(faer, 'r')
     frac_aer_model = {}
     for key in match.keys():
-        f.readline ()
+        tmp = f.readline ()
         line = f.readline ()
         frac_aer_model[key] =  np.array(line.split()).astype(float)
     f.close()
