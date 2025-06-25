@@ -5,7 +5,8 @@ dependencies = [
     "numpy", 
     "xarray", 
     "pyopencl", 
-    "h5py"
+    "h5py",
+    "core @ git+https://github.com/hygeos/core.git"
     ]
 
 [tool.pixi.project]

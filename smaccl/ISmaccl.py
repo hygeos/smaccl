@@ -1,6 +1,5 @@
 from smaccl import Smaccl
 import numpy as np
-from luts.luts import read_mlut, Idx, MLUT
 from c3s_lib import set_ac_flag, closest_model_vito, pre_brdf, Ps, dPsdz
 import math
 import xarray as xa
@@ -34,7 +33,10 @@ class ISmaccl(object):
         """
         return getattr(self.smaccl, name)
     
-    def run(self, l2_data, merra, dem, frac_aer_model, coeffs):
+    def run(self, l2_data, merra, dem, frac_aer_model, coeffs, brdf=None):
+        """
+        Run the ISmaccl instance with the provided arguments.
+        """
         sza = l2_data['SZA'].data
         SIZE1, SIZE2 = sza.shape
         good = np.where(sza < 90)
@@ -48,35 +50,14 @@ class ISmaccl(object):
         lon = l2_data['lon'].data[good]
         t0 = l2_data['mean-time-dec'].data
 
-#        taup550 = merra['TOTEXTTAU'].data[good].astype(np.float32, order='C')
-        taup550 = merra['TOTEXTTAU'][Idx(t0,  round=False, fill_value='extrema'),
-                                Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
-        uh2o    = merra['TQV'][Idx(t0,  round=False, fill_value='extrema'),
-                                Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
-        uo3     = merra['TO3'][Idx(t0,  round=False, fill_value='extrema'), 
-                                Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')
- 
-        p0      = merra['SLP'][Idx(t0,  round=False, fill_value='extrema'),
-                                Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C') 
-        t10m    = merra['T10M'][Idx(t0,  round=False, fill_value='extrema'), 
-                                Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')
-#        uh2o = merra['TQV'].data[good].astype(np.float32, order='C')
-#        uo3 = merra['TO3'].data[good].astype(np.float32, order='C')
-#        p0 = merra['SLP'].data[good].astype(np.float32, order='C')
-#        t10m = merra['T10M'].data[good].astype(np.float32, order='C')
-#
-#        alt = dem['elev'].data[good].astype(np.float32, order='C')
-#        Dalt = dem['Delev'].data[good].astype(np.float32, order='C')
-        alt     = np.array(dem['elev'][Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')]).astype(np.float32, order='C') 
-        Dalt    = np.array(dem['Delev'][Idx(lat, round=False, fill_value='extrema'), 
-                                Idx(lon, round=False, fill_value='extrema')]).astype(np.float32, order='C')
-#
+        taup550 = merra['TOTEXTTAU'].data[good].astype(np.float32, order='C')
+        uh2o = merra['TQV'].data[good].astype(np.float32, order='C')
+        uo3 = merra['TO3'].data[good].astype(np.float32, order='C')
+        p0 = merra['SLP'].data[good].astype(np.float32, order='C')
+        t10m = merra['T10M'].data[good].astype(np.float32, order='C')
+
+        alt = dem['elev'].data[good].astype(np.float32, order='C')
+        Dalt = dem['Delev'].data[good].astype(np.float32, order='C')
 #        # flag large aot pixels
         flag = (taup550 > self.config['taot'])
         l2_data['ac_process_flag'] = (['y','x'], np.zeros(l2_data['SZA'].data.shape, dtype='ubyte'))
@@ -97,9 +78,7 @@ class ISmaccl(object):
             iaero[:] = self.config['aero_nmod']
         else:
             for k,key in enumerate(frac_aer_model.keys()):
-                frac = merra[match[key]+'_FRAC'][Idx(t0,  round=False, fill_value='extrema'),
-                                    Idx(lat, round=False, fill_value='extrema'), 
-                                    Idx(lon, round=False, fill_value='extrema')].astype(np.float32, order='C')              
+                frac = merra[match[key]+'_FRAC'].data[good].astype(np.float32, order='C')
                 xb.append(frac_aer_model[key])
                 xm.append(frac)
             xb = np.stack(xb, axis=0)
@@ -112,18 +91,14 @@ class ISmaccl(object):
         GSIZE= good[0].size
         # brdf arrays
         # Test for BRDF input data for correction
-        if 'brdf' in self.config.keys():
-            print("BRDF inputs for correction: {}".format(self.config['brdf']))
-            kp12_lut = pre_brdf((self.config['brdf']))
-            k1p    = np.moveaxis(kp12_lut['kp12'][Idx(lat, round=False, fill_value='extrema'), 
-                                      Idx(lon, round=False, fill_value='extrema'),
-                                      :, 0],[0,1],[1,0]).astype(np.float32, order='C')
-            k2p    = np.moveaxis(kp12_lut['kp12'][Idx(lat, round=False, fill_value='extrema'), 
-                                      Idx(lon, round=False, fill_value='extrema'),
-                                      :, 1],[0,1],[1,0]).astype(np.float32, order='C')
-        else:
+        if brdf is None:
             k1p = np.zeros((NB, GSIZE), dtype='float32', order='C')
             k2p = np.zeros((NB, GSIZE), dtype='float32', order='C')
+        else:
+            print("BRDF inputs for correction: {}".format(self.config['brdf']))
+            k2p = brdf['kp12'].data[1].astype(np.float32, order='C')
+            k1p = brdf['kp12'].data[0].astype(np.float32, order='C')
+
 
         k_uh2o = self.config['k_uh2o']
         k_uo3 =  self.config['k_uo3']

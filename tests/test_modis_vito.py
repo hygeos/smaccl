@@ -3,12 +3,14 @@
 
 import pytest
 import sys
-sys.path.append('/mnt/qnaphome/bruno/Projets/smaccl')
+import xarray as xa
+from core import interpolate
+sys.path.append('/mnt/qnaphome/bruno/Projets/smaccl/smaccl/')
 from c3s_io_modis import load_modis
 from ISmaccl import ISmaccl
 import configparser
 from c3s_lib import pre_merra2, pre_aer_models
-from luts.luts import read_mlut
+#from luts.luts import read_mlut
 
 #product = pytest.fixture(params=[
 #    '/mnt/pve/cephfs/proj/CCI_VGT/MODIS/TERRA/A2019052.0950.061/MODIS_Terra_500_X19Y04_201902210950_333M.nc'
@@ -42,15 +44,39 @@ def test_run_smaccl():
     l2_data, coeffs, sizes, tab_band_internal = load_modis(product, smaccoeffs, 0, -1, bands)
     l2_data, coeffs, sizes, tab_band_internal = load_modis(product, smaccoeffs, 0, sizes[0], bands) 
     l2_data['bands'] = tab_band_internal
-    merra_lut = pre_merra2(merra_aerosol, merra_ptwo)
+    t0 = l2_data['mean-time-dec'].data
     frac_aer_model = pre_aer_models(faer)
-    dem = read_mlut(config['dem'])
+    dem = xa.open_dataset(dem)
+    elev = dem['elev']
+    Delev = dem['Delev']
+    elev_interp = interpolate.interp(elev, lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']))
+    Delev_interp = interpolate.interp(Delev, lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']))
+    dem = xa.Dataset({'elev': elev_interp, 'Delev': Delev_interp},
+                       coords={'lat': l2_data['lat'], 'lon': l2_data['lon']})
+    
+    merra_aer = xa.open_dataset(merra_aerosol)
+    merra_p2 = xa.open_dataset(merra_ptwo)
+
+    tau  = interpolate.interp(merra_aer['TOTEXTTAU'], lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    uh2o    = interpolate.interp(merra_p2['TQV'], lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    uo3     = interpolate.interp(merra_p2['TO3'], lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    p0      = interpolate.interp(merra_p2['SLP'], lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    t10m    = interpolate.interp(merra_p2['T10M'], lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    bc_frac = interpolate.interp(merra_aer['BCEXTTAU'] , lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    du_frac = interpolate.interp(merra_aer['DUEXTTAU'] , lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    oc_frac = interpolate.interp(merra_aer['OCEXTTAU'] , lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    ss_frac = interpolate.interp(merra_aer['SSEXTTAU'] , lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+    su_frac = interpolate.interp(merra_aer['SUEXTTAU'] , lat=interpolate.Linear(l2_data['lat']), lon=interpolate.Linear(l2_data['lon']), time=interpolate.Linear(l2_data['mean-time']))
+
+    merra = xa.Dataset({'TOTEXTTAU':tau, 'TQV':uh2o, 'TO3':uo3, 'SLP':p0, 'T10M':t10m, 'BC_FRAC':bc_frac/tau, 'DU_FRAC':du_frac/tau, 'SS_FRAC':ss_frac/tau, 'SU_FRAC':su_frac/tau, "OC_FRAC":oc_frac}, 
+                       coords={'lat': l2_data['lat'], 'lon': l2_data['lon']})
+
 
     # test de l'interface smaccl
     sm = ISmaccl(config, platform='CPU')
-    toc_data = sm.run(l2_data, merra_lut, dem, frac_aer_model, coeffs)
+    toc_data = sm.run(l2_data, merra, dem, frac_aer_model, coeffs)
 
-    print(toc_data)
+#    print(toc_data)
     toc_data['SZA'] = l2_data['SZA']
     toc_data['VZA'] = l2_data['VZA']
     toc_data['SAA'] = l2_data['SAA']
