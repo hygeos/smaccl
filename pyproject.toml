@@ -31,3 +31,6 @@ dask = "*"
 [tool.setuptools.packages.find]
 where = ["smaccl"]
 include = ["src_opencl"]
+
+[tool.pixi.pypi-dependencies]
+smaccl = { path = ".", editable = true }
