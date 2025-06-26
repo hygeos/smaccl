@@ -27,3 +27,7 @@ scipy = "*"
 netcdf4 = "*"
 h5netcdf = "*"
 dask = "*"
+
+[tool.setuptools.packages.find]
+where = ["smaccl"]
+include = ["src_opencl"]
