@@ -6,15 +6,22 @@ dependencies = [
     "xarray", 
     "pyopencl", 
     "h5py",
-    "core @ git+https://github.com/hygeos/core.git"
+    "core @ git+https://github.com/hygeos/core.git",
     ]
 
 [tool.pixi.project]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.pixi.tasks]
 tests = "pytest tests/"
+
+#[tool.pixi.pypi-dependencies]
+#smaccl = { path = ".", editable = true }
 
 [tool.pixi.dependencies]
 pytest = "*"
@@ -27,10 +34,3 @@ scipy = "*"
 netcdf4 = "*"
 h5netcdf = "*"
 dask = "*"
-
-[tool.setuptools.packages.find]
-where = ["smaccl"]
-include = ["src_opencl"]
-
-[tool.pixi.pypi-dependencies]
-smaccl = { path = ".", editable = true }
