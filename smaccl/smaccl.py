@@ -22,7 +22,7 @@ print(__module__ + ' ' + __version__)
 # set up directories
 dir_root = dirname(realpath(__file__))
 print(dir_root)
-dir_src = join(dir_root, './src_opencl/')
+dir_src = join(dir_root, './')
 dir_bin = join(dir_root, 'bin/')
 print("###### : ",dir_src)
 src_device = join(dir_src, 'devicecl.cl')
