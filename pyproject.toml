@@ -7,8 +7,14 @@ dependencies = [
     "pyopencl", 
     "h5py",
     "core @ git+https://github.com/hygeos/core.git",
+    "scipy",
+#    "smac-neo @ git+https://github.com/hygeos/smac-neo.git"
     ]
 
+[tool.poetry]
+mane = "smaccl"
+version = "1.0"
+packages = [ {include = "smaccl"}]
 [tool.pixi.project]
 channels = ["conda-forge"]
 platforms = ["linux-64"]
@@ -22,6 +28,7 @@ tests = "pytest tests/"
 
 #[tool.pixi.pypi-dependencies]
 #smaccl = { path = ".", editable = true }
+#smac-neo = { path = "/mnt/qnaphome/bruno/Projets/smac-neo", editable = true }
 
 [tool.pixi.dependencies]
 pytest = "*"
@@ -33,4 +40,5 @@ h5py = "*"
 scipy = "*"
 netcdf4 = "*"
 h5netcdf = "*"
+jax = '*'
 dask = "*"

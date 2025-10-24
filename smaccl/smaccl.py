@@ -21,10 +21,8 @@ print(__module__ + ' ' + __version__)
 
 # set up directories
 dir_root = dirname(realpath(__file__))
-print(dir_root)
-dir_src = join(dir_root, './')
+dir_src = join(dir_root, 'kernels/')
 dir_bin = join(dir_root, 'bin/')
-print("###### : ",dir_src)
 src_device = join(dir_src, 'devicecl.cl')
 binname =  join(dir_bin, 'smac.clbin')
 #dir_tmp = join(dir_root, 'tmp/')
@@ -393,7 +391,7 @@ def get_smac_coeffs_fromtxt(bands):
 
 class Smaccl(object):
 
-    def __init__(self, platform='GPU'):
+    def __init__(self, platform='GPU', environment='Default'):
 
 #        print("....  testsmaccl1 class __init__ ")
 
@@ -425,13 +423,12 @@ class Smaccl(object):
 #            print ('... Get a queue')
             #self.clqueue = cl.CommandQueue(self.clcontext)
 #            self.clqueue = cl.CommandQueue(self.clcontext, properties=cl.command_queue_properties.PROFILING_ENABLE)
-            status = self.set_queue(platform)
+            status = self.set_queue(platform, environment)
             if not(status):
                 raise IOError('all devices busying')
 
             print(self.cldevice, " ; ", self.cldevice.version, " ; ", self.cldevice.driver_version)
             # load devicecl.cl
-            print(src_device)
             programFile = open(src_device, 'r')
             programText = programFile.read()
             program     = cl.Program(self.clcontext, programText)
@@ -515,7 +512,7 @@ class Smaccl(object):
 
             - uh2o : Water vapour column float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
 
-            - uo3  : Ozone column float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
+            - uo3  : Ozone column float32 arrays of dimension (X
 
             - taup550  : AOT at 550 nm float32 arrays of dimension (XBLOCK,XGRID,Z) where Z is 3rd dimension of pixels
 
@@ -543,6 +540,7 @@ class Smaccl(object):
 
         '''
         NBAND = coeffs.shape[0]
+        Naero = iaero.shape[0]
         if len(coeffs.shape) == 2:
             nMod = coeffs.shape[1]
         else:
@@ -553,9 +551,13 @@ class Smaccl(object):
         if (rtoa.ndim == 4) :
             NZ  = shp[1]
         else : NZ=1
+        shp2 = list(shp)
+        shp2.insert(0,Naero)
+        shp2 = tuple(shp2)
 
         #output arrays
-        rsurf = np.empty_like(rtoa)
+#        rsurf = np.empty_like(rtoa)
+        rsurf = np.empty(shp2, dtype=np.float32)
         Jrtoa = np.empty_like(rtoa)
         Juo3  = np.empty_like(rtoa)
         Juh2o = np.empty_like(rtoa)
@@ -568,8 +570,7 @@ class Smaccl(object):
         Juh2od   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Juh2o)
         Jpred    = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jpre)
         Jtaupd   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jtaup)
-        
-        
+
         clcoeffs   = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=coeffs)
         cltetas    = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=tetas)
         cltetav    = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=tetav)
@@ -606,11 +607,12 @@ class Smaccl(object):
         Jtaupd,
         clk1p,
         clk2p,
-        claero,
+        claero[:],
         np.int32(nMod),
         np.int32(NBLOOP),
         np.int32(NBAND),
-        np.int32(NZ)
+        np.int32(NZ),
+        np.int32(Naero)
         )
         
         cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
@@ -624,14 +626,16 @@ class Smaccl(object):
         
         return ( rsurf, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
 
-    def set_queue(self, xpu='GPU'):
-        typedevice = {'CPU':'Portable Computing Language','GPU':'NVIDIA CUDA'}
-#        typedevice = {'CPU':'Intel(R) OpenCL'} #turenne
-#        typedevice = {'CPU':'Intel(R) OpenCL','GPU':'NVIDIA CUDA'} # mep
+    def set_queue(self, xpu='GPU', environment='Default'):
+        typedevice={
+                    'Default':    {'CPU':'Portable Computing Language','GPU':'NVIDIA CUDA'},
+                    'Turenne':    {'CPU':'Intel(R) OpenCL'},
+                    'TerraScope': {'CPU':'Intel(R) OpenCL','GPU':'NVIDIA CUDA'}
+                    }
         platforms = cl.get_platforms()
         print(platforms)
         for plat in platforms:
-            if typedevice[xpu] == plat.name:
+            if typedevice[environment][xpu] == plat.name:
                 devices = plat.get_devices()
                 for device in devices:
                     try:
