@@ -77,7 +77,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                      __global float *rsurf, __global float *Jr, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
                      __global float *Jtaup, 
                      __global float *k1p_, __global float *k2p_,
-                     __global int *iaero, int NMOD, 
+                     __global short *iaero, int NMOD, 
                     int NBLOOPd, int NBANDd, int NZd, int Naerod)
  
 {
@@ -128,7 +128,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float Peq ;
     float Res_ray, Res_aer, Res_6s;
     float ray_phase, ray_ref, aer_ref, aer_phase ;
-    int iAero = 0;
+    short iAero = 0;
 
     unsigned long int irt;
 
@@ -137,11 +137,30 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     for (int ip=0; ip<XNZd; ip++) {
         unsigned long int jj = idx + ip*M; 
         float tetas=tetas_[jj], tetav=tetav_[jj], phis=phis_[jj], phiv=phiv_[jj], uh2o=uh2o_[jj], uo3=uo3_[jj]; 
+        us = cos (tetas*cdr);
+        uv = cos (tetav*cdr);
+        dphi=(phis-phiv)*cdr;
+        /*------ 1) air mass */
+        m =  1./us + 1./uv;
 
+        /*------  7) scattering angle cosine */
+        cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
+        if (cksi < -1 ) cksi=-1.0 ;
+
+        /*------  8) scattering angle in degree */
+        ksiD = crd*acos(cksi) ;
+
+        /*------  9) rayleigh atmospheric reflectance */
+        /* pour 6s on a delta = 0.0279 */
+        ray_phase = 0.7190443 * (1. + (cksi*cksi))  + 0.0412742 ;
 
             // loop on the number of bands
         for (int ib=0; ib<XNBANDd; ib++) {
-                unsigned long int ii = idx + ip*M + ib*M*XNZd;
+            unsigned long int ii = idx + ip*M + ib*M*XNZd;
+            float rtoa=rtoa_[ii];
+            float k1p = k1p_[ii];
+            float k2p = k2p_[ii];
+
             for (int ia=0; ia<XNaerod; ia++) {
 //                irt = M*XNZd*XNBANDd*ia + ii;
                 irt = idx + ip*M + ib*M*XNZd + ia*M*XNZd*XNBANDd;
@@ -151,22 +170,12 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
 //                    ir = ia + XNaerod*ii;
                     unsigned long int kk = ib*NMOD+iAero;
                     float taup550=taup550_[jj], pression=pression_[jj];
-                    float rtoa=rtoa_[ii];
-                    float k1p = k1p_[ii];
-                    float k2p = k2p_[ii];
 
                     float dtau = dtau_rel * taup550;
                     if (ir==0) pression -= dpre;
                     if (ir==1) taup550  -= dtau;
-
-                    us = cos (tetas*cdr);
-                    uv = cos (tetav*cdr);
-                    dphi=(phis-phiv)*cdr;
                     Peq=pression/1013.0;
       
-                    /*------ 1) air mass */
-                    m =  1./us + 1./uv;
-
                     /*------  2) aerosol optical depth in the spectral band, taup  */
                     taup = (ca[kk].a0taup) + (ca[kk].a1taup) * taup550 ;
 
@@ -204,16 +213,16 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                     /*------  6) spherical albedo of the atmosphere */
                     s = (ca[kk].a0s) * Peq +  (ca[kk].a3s) + (ca[kk].a1s)*taup550 + (ca[kk].a2s) *pow (taup550 , 2) ;
 
-                    /*------  7) scattering angle cosine */
-                    cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
-                    if (cksi < -1 ) cksi=-1.0 ;
-
-                    /*------  8) scattering angle in degree */
-                    ksiD = crd*acos(cksi) ;
-
-                    /*------  9) rayleigh atmospheric reflectance */
-                    /* pour 6s on a delta = 0.0279 */
-                    ray_phase = 0.7190443 * (1. + (cksi*cksi))  + 0.0412742 ;
+//                    /*------  7) scattering angle cosine */
+//                    cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
+//                    if (cksi < -1 ) cksi=-1.0 ;
+//
+//                    /*------  8) scattering angle in degree */
+//                    ksiD = crd*acos(cksi) ;
+//
+//                    /*------  9) rayleigh atmospheric reflectance */
+//                    /* pour 6s on a delta = 0.0279 */
+//                    ray_phase = 0.7190443 * (1. + (cksi*cksi))  + 0.0412742 ;
 
                     taurz=(ca[kk].taur)*Peq;
 
@@ -340,9 +349,9 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                             Jtaup[ii] += rsurf[irt];
                         }
                     }
-                } // main loop (ia)
-            } // main loop (ib)
-        } // main loop (ir)
+                } // main loop (ir)
+            } // main loop (ia)
+        } // main loop (ib)
     } // main loop (ip)
 
 }

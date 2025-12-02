@@ -558,11 +558,11 @@ class Smaccl(object):
         #output arrays
 #        rsurf = np.empty_like(rtoa)
         rsurf = np.empty(shp2, dtype=np.float32)
-        Jrtoa = np.empty_like(rtoa)
-        Juo3  = np.empty_like(rtoa)
-        Juh2o = np.empty_like(rtoa)
-        Jpre  = np.empty_like(rtoa)
-        Jtaup = np.empty_like(rtoa)
+        Jrtoa = np.empty_like(rtoa, dtype=np.float32)
+        Juo3  = np.empty_like(rtoa, dtype=np.float32)
+        Juh2o = np.empty_like(rtoa, dtype=np.float32)
+        Jpre  = np.empty_like(rtoa, dtype=np.float32)
+        Jtaup = np.empty_like(rtoa, dtype=np.float32)
         
         rsurfd   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=rsurf)
         Jrtoad   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jrtoa)
