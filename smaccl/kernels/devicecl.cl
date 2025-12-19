@@ -74,7 +74,7 @@ float F2_rtls(float ths, float thv, float phi ){  //  rossthick-lisparse, only F
 
 __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
-                     __global float *rsurf, __global float *Jr, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
+                     __global float *rsurf, __global float *dev_std, __global float *Jr, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
                      __global float *Jtaup, 
                      __global float *k1p_, __global float *k2p_,
                      __global short *iaero, int NMOD, 
@@ -129,9 +129,9 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float Res_ray, Res_aer, Res_6s;
     float ray_phase, ray_ref, aer_ref, aer_phase ;
     short iAero = 0;
+    float toc, toc_mean, toc_std;
 
     unsigned long int irt;
-
 
     // loop on the 3rd dimension (remaining pixels)
     for (int ip=0; ip<XNZd; ip++) {
@@ -161,9 +161,11 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
             float k1p = k1p_[ii];
             float k2p = k2p_[ii];
 
+            toc_mean = 0;
+            toc_std = 0;
             for (int ia=0; ia<XNaerod; ia++) {
 //                irt = M*XNZd*XNBANDd*ia + ii;
-                irt = idx + ip*M + ib*M*XNZd + ia*M*XNZd*XNBANDd;
+            //    irt = idx + ip*M + ib*M*XNZd + ia*M*XNZd*XNBANDd;
                 iAero = iaero[jj + ia*M*XNZd];
                 // loop on number of run necessary to compute some Jacobians with finite difference
                 for (int ir=0; ir<NRUN; ir++) {
@@ -289,7 +291,8 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
 
                      /* reflectance at surface */
                     /*------------------------*/
-                    rsurf[irt] = rtoa - (atm_ref * tg) ;
+//                    rsurf[irt] = rtoa - (atm_ref * tg) ;
+                    toc = rtoa - (atm_ref * tg) ;
                     float ax1 = F1_rtls(tetas*cdr, tetav*cdr, dphi);
                     float ax2 = F2_rtls(tetas*cdr, tetav*cdr, dphi);
                     float f1_bar_down = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
@@ -309,9 +312,11 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                                 (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
                                 (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
                                 (tdiftetav*tdiftetas) * (ref_surf_bar_barN);
-                    rsurf[irt] = rsurf[irt] / ( (tg * trans_atm) + (rsurf[irt] * s) ) ;
+//                    rsurf[irt] = rsurf[irt] / ( (tg * trans_atm) + (rsurf[irt] * s) ) ;
+                    toc = toc / ( (tg * trans_atm) + (toc * s) ) ;
                     
                     if (ia==0) {
+                        rsurf[ii] = toc;
                         /* Analytical Jacobian of surface reflectance vs toa reflectance*/
                         /*------------------------*/
                         float ttt   = tg * trans_atm;
@@ -342,15 +347,28 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
           
                         /* Finite difference Jacobians of surface reflectance vs pressure and taup550*/
                         /*------------------------*/
-                        if (ir==0) Jpre[ii]  = -rsurf[irt];
-                        if (ir==1) Jtaup[ii] = -rsurf[irt];
+//                        if (ir==0) Jpre[ii]  = -rsurf[irt];
+//                        if (ir==1) Jtaup[ii] = -rsurf[irt];
+//                        if (ir==2) {
+//                            Jpre[ii]  += rsurf[irt];
+//                            Jtaup[ii] += rsurf[irt];
+//                        }
+                        if (ir==0) Jpre[ii]  = -rsurf[ii];
+                        if (ir==1) Jtaup[ii] = -rsurf[ii];
                         if (ir==2) {
-                            Jpre[ii]  += rsurf[irt];
-                            Jtaup[ii] += rsurf[irt];
+                            Jpre[ii]  += rsurf[ii];
+                            Jtaup[ii] += rsurf[ii];
                         }
                     }
                 } // main loop (ir)
+                if (ia!=0) {
+                    toc_mean += toc;
+                    toc_std  += toc*toc;
+                }
             } // main loop (ia)
+            toc_mean /= (float)(XNaerod -1);
+            toc_std /= (float)(XNaerod -1);
+            dev_std[ii] = sqrt( toc_std - toc_mean*toc_mean );
         } // main loop (ib)
     } // main loop (ip)
 

@@ -491,7 +491,7 @@ class Smaccl(object):
 
     def run(self, coeffs, tetas, tetav, phis, phiv,
                 uh2o, uo3, taup550, pression, rtoa, k1p, k2p,
-                iaero, XBLOCK=128, XGRID=128, NBLOOP=1):
+                iaero, NBLOOP=1):
 
 #        print("....  testsmaccl1 class run ")
         
@@ -557,7 +557,8 @@ class Smaccl(object):
 
         #output arrays
 #        rsurf = np.empty_like(rtoa)
-        rsurf = np.empty(shp2, dtype=np.float32)
+        rsurf = np.empty(shp, dtype=np.float32)
+        dev_std = np.empty_like(rtoa, dtype=np.float32)
         Jrtoa = np.empty_like(rtoa, dtype=np.float32)
         Juo3  = np.empty_like(rtoa, dtype=np.float32)
         Juh2o = np.empty_like(rtoa, dtype=np.float32)
@@ -565,6 +566,7 @@ class Smaccl(object):
         Jtaup = np.empty_like(rtoa, dtype=np.float32)
         
         rsurfd   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=rsurf)
+        dev_stdd = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=dev_std)
         Jrtoad   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jrtoa)
         Juo3d    = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Juo3)
         Juh2od   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Juh2o)
@@ -600,6 +602,7 @@ class Smaccl(object):
         clpression, 
         clrtoa, 
         rsurfd,
+        dev_stdd,
         Jrtoad,
         Juo3d,
         Juh2od,
@@ -616,6 +619,7 @@ class Smaccl(object):
         )
         
         cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
+        cl.enqueue_copy(self.clqueue, dev_std, dev_stdd)
         cl.enqueue_copy(self.clqueue, Jrtoa, Jrtoad)
         cl.enqueue_copy(self.clqueue, Juo3, Juo3d)
         cl.enqueue_copy(self.clqueue, Juh2o, Juh2od)
@@ -624,7 +628,7 @@ class Smaccl(object):
  
         print(".... Smaccl: Smaccl  kernel (run) end  ")
         
-        return ( rsurf, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
+        return ( rsurf, dev_std, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
 
     def set_queue(self, xpu='GPU', environment='Default'):
         typedevice={

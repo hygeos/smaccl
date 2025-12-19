@@ -670,13 +670,13 @@ def closest_model(X, Xb):
     return np.sum((X[:, np.newaxis, :]-Xb[:, :, np.newaxis])**2, axis=0).argmin(axis=0)
 
 
-def closest_models(X, Xb):
+def closest_models(X, Xb, Nmodels=10):
     '''
     return the 10 closest model numbers compared to reference basis
     it is a distance minimization in a 5-dimensional space
     '''
 
-    return np.sum((X[:, np.newaxis, :]-Xb[:, :, np.newaxis])**2, axis=0).argsort(axis=0)[:10, :]
+    return np.sum((X[:, np.newaxis, :]-Xb[:, :, np.newaxis])**2, axis=0).argsort(axis=0)[:Nmodels, :]
 
 
 def load_cams(filename):
