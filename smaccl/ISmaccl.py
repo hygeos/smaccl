@@ -142,7 +142,6 @@ class ISmaccl(object):
         
         iaero_good = iaero[:, good[0], good[1]]
 
-#        rsurf = np.zeros((4, SIZE1, SIZE2, iaero_good.shape[0]), dtype='float32') + np.nan 
         rsurf = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan 
         dev_std = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Jrtoa = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
@@ -150,13 +149,11 @@ class ISmaccl(object):
         Juo3 = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Jpre = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Jtaup = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
-#        Drsurf = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Duh2o = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Duo3 = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Drtoa = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Dpre = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Dtaup = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
-#Duh2o, Duo3, Drtoa, Dpre, Dtaup
         if l2_data.sensor == 'Proba-V':
             band_data = np.zeros((2, SIZE1, SIZE2), dtype='float32')
             band_data = l2_data['TOA'].values[:2, good[0], good[1]]
@@ -170,7 +167,6 @@ class ISmaccl(object):
             Jrtoa[:2, good[0], good[1]] = toc_data_vis[4]
             Jpre[:2, good[0], good[1]] = toc_data_vis[5]
             Jtaup[:2, good[0], good[1]] = toc_data_vis[6]
-#            Drsurf[:2, good[0], good[1]] = toc_data_vis[7]
             Duh2o[:2, good[0], good[1]] = toc_data_vis[7]
             Duo3[:2, good[0], good[1]] = toc_data_vis[8]
             Drtoa[:2, good[0], good[1]] = toc_data_vis[9]
@@ -188,12 +184,11 @@ class ISmaccl(object):
             Jrtoa[2:, good[0], good[1]] = toc_data_ir[4]
             Jpre[2:, good[0], good[1]] = toc_data_ir[5]
             Jtaup[2:, good[0], good[1]] = toc_data_ir[6]
-#            Drsurf[2:, good[0], good[1]] = toc_data_ir[7]
-            Duh2o[2:, good[0], good[1]] = toc_data_vis[7]
-            Duo3[2:, good[0], good[1]] = toc_data_vis[8]
-            Drtoa[2:, good[0], good[1]] = toc_data_vis[9]
-            Dpre[2:, good[0], good[1]] = toc_data_vis[10]
-            Dtaup[2:, good[0], good[1]] = toc_data_vis[11]
+            Duh2o[2:, good[0], good[1]] = toc_data_ir[7]
+            Duo3[2:, good[0], good[1]] = toc_data_ir[8]
+            Drtoa[2:, good[0], good[1]] = toc_data_ir[9]
+            Dpre[2:, good[0], good[1]] = toc_data_ir[10]
+            Dtaup[2:, good[0], good[1]] = toc_data_ir[11]
 
         else:
             band_data = np.zeros((len(l2_data.bands), SIZE1, SIZE2), dtype='float32')
@@ -209,11 +204,11 @@ class ISmaccl(object):
             Jpre[:, good[0], good[1]] = toc_data[5]
             Jtaup[:, good[0], good[1]] = toc_data[6]
 #            Drsurf[:, good[0], good[1]] = toc_data[7]
-            Duh2o[:, good[0], good[1]] = toc_data_vis[7]
-            Duo3[:, good[0], good[1]] = toc_data_vis[8]
-            Drtoa[:, good[0], good[1]] = toc_data_vis[9]
-            Dpre[:, good[0], good[1]] = toc_data_vis[10]
-            Dtaup[:, good[0], good[1]] = toc_data_vis[11]
+            Duh2o[:, good[0], good[1]] = toc_data[7]
+            Duo3[:, good[0], good[1]] = toc_data[8]
+            Drtoa[:, good[0], good[1]] = toc_data[9]
+            Dpre[:, good[0], good[1]] = toc_data[10]
+            Dtaup[:, good[0], good[1]] = toc_data[11]
 
 
 #        t_4d = (l2_data['TOA'].expand_dims({'aermodel':iaero_good.shape[0]}, axis=3)) + np.nan
