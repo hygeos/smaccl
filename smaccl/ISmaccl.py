@@ -9,6 +9,9 @@ import dask.array as da
 __module__    = "ISmaccl.py"    
 __version__   = "1.01.00"
 
+def rsme_aod(tau_550, sigma_base, sigma_rel):
+    return np.maximum(sigma_base, sigma_rel*tau_550)
+
 class ISmaccl(object):
     """
     ISmaccl is a wrapper for the Smaccl class that provides an interface
@@ -100,8 +103,13 @@ class ISmaccl(object):
                     'Juo3': t_3d,
                     'Jpre': t_3d,
                     'Drsurf': t_3d,
-                    'ac_process_flag': t_2d.astype('ubyte'),
-                    'ac_flag': t_2d.astype('uint32'),
+                    'Duh2o': t_3d,
+                    'Duo3': t_3d,
+                    'Drtoa': t_3d,
+                    'Dpre': t_3d,
+                    'Dtaup': t_3d,
+                    'UrTOC_ens' : t_3d,
+                    'Jtau550' : t_3d
                 },
             )
             return ds_out
@@ -141,35 +149,51 @@ class ISmaccl(object):
         Juh2o = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Juo3 = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
         Jpre = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
-        Drsurf = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
-
+        Jtaup = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+#        Drsurf = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+        Duh2o = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+        Duo3 = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+        Drtoa = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+        Dpre = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+        Dtaup = np.zeros((4, SIZE1, SIZE2), dtype='float32') + np.nan
+#Duh2o, Duo3, Drtoa, Dpre, Dtaup
         if l2_data.sensor == 'Proba-V':
             band_data = np.zeros((2, SIZE1, SIZE2), dtype='float32')
             band_data = l2_data['TOA'].values[:2, good[0], good[1]]
             vza = l2_data['VZA'].values[good]
             vaa = l2_data['VAA'].values[good]
             toc_data_vis = self.exec_smaccl(sza, vza, saa, vaa, taup550, uh2o, uo3, p0, t10m, alt, Dalt, lat, None, band_data, band_err, frac, self.frac_aer_model, self.ca[:2], iaero_good, brdf)
-#            rsurf[:2, good[0], good[1], :] = toc_data_vis[0]
             rsurf[:2, good[0], good[1]] = toc_data_vis[0]
             dev_std[:2, good[0], good[1]] = toc_data_vis[1]
             Juh2o[:2, good[0], good[1]] = toc_data_vis[2]
             Juo3[:2, good[0], good[1]] = toc_data_vis[3]
             Jrtoa[:2, good[0], good[1]] = toc_data_vis[4]
             Jpre[:2, good[0], good[1]] = toc_data_vis[5]
-            Drsurf[:2, good[0], good[1]] = toc_data_vis[6]
+            Jtaup[:2, good[0], good[1]] = toc_data_vis[6]
+#            Drsurf[:2, good[0], good[1]] = toc_data_vis[7]
+            Duh2o[:2, good[0], good[1]] = toc_data_vis[7]
+            Duo3[:2, good[0], good[1]] = toc_data_vis[8]
+            Drtoa[:2, good[0], good[1]] = toc_data_vis[9]
+            Dpre[:2, good[0], good[1]] = toc_data_vis[10]
+            Dtaup[:2, good[0], good[1]] = toc_data_vis[11]
 
             band_data = l2_data['TOA'].values[2:, good[0], good[1]]
             vza = l2_data['VZA_IR'].values[good]
             vaa = l2_data['VAA_IR'].values[good]
             toc_data_ir = self.exec_smaccl(sza, vza, saa, vaa, taup550, uh2o, uo3, p0, t10m, alt, Dalt, lat, None, band_data, band_err, frac, self.frac_aer_model, self.ca[2:], iaero_good, brdf)
-#            rsurf[2:, good[0], good[1], :] = toc_data_ir[0]
             rsurf[2:, good[0], good[1]] = toc_data_ir[0]
             dev_std[2:, good[0], good[1]] = toc_data_ir[1]
             Juh2o[2:, good[0], good[1]] = toc_data_ir[2]
             Juo3[2:, good[0], good[1]] = toc_data_ir[3]
             Jrtoa[2:, good[0], good[1]] = toc_data_ir[4]
             Jpre[2:, good[0], good[1]] = toc_data_ir[5]
-            Drsurf[2:, good[0], good[1]] = toc_data_ir[6]
+            Jtaup[2:, good[0], good[1]] = toc_data_ir[6]
+#            Drsurf[2:, good[0], good[1]] = toc_data_ir[7]
+            Duh2o[2:, good[0], good[1]] = toc_data_vis[7]
+            Duo3[2:, good[0], good[1]] = toc_data_vis[8]
+            Drtoa[2:, good[0], good[1]] = toc_data_vis[9]
+            Dpre[2:, good[0], good[1]] = toc_data_vis[10]
+            Dtaup[2:, good[0], good[1]] = toc_data_vis[11]
 
         else:
             band_data = np.zeros((len(l2_data.bands), SIZE1, SIZE2), dtype='float32')
@@ -177,31 +201,35 @@ class ISmaccl(object):
             vza = l2_data['VZA'].values[good]
             vaa = l2_data['VAA'].values[good]
             toc_data = self.exec_smaccl(sza, vza, saa, vaa, taup550, uh2o, uo3, p0, t10m, alt, Dalt, lat, None, band_data, band_err, frac, self.frac_aer_model, self.ca, iaero_good, brdf)
-#            rsurf[:, good[0], good[1], :] = toc_data[0]
             rsurf[:, good[0], good[1]] = toc_data[0]
             dev_std[:, good[0], good[1]] = toc_data[1]
             Juh2o[:, good[0], good[1]] = toc_data[2]
             Juo3[:, good[0], good[1]] = toc_data[3]
             Jrtoa[:, good[0], good[1]] = toc_data[4]
             Jpre[:, good[0], good[1]] = toc_data[5]
-            Drsurf[:, good[0], good[1]] = toc_data[6]
+            Jtaup[:, good[0], good[1]] = toc_data[6]
+#            Drsurf[:, good[0], good[1]] = toc_data[7]
+            Duh2o[:, good[0], good[1]] = toc_data_vis[7]
+            Duo3[:, good[0], good[1]] = toc_data_vis[8]
+            Drtoa[:, good[0], good[1]] = toc_data_vis[9]
+            Dpre[:, good[0], good[1]] = toc_data_vis[10]
+            Dtaup[:, good[0], good[1]] = toc_data_vis[11]
 
 
 #        t_4d = (l2_data['TOA'].expand_dims({'aermodel':iaero_good.shape[0]}, axis=3)) + np.nan
-        print(ac_process_flag.shape)
         t_2d = l2_data['SZA'] + np.nan
         t_2d.data = ac_process_flag
         t_3d = l2_data['TOA'] + np.nan
 #        t_4d.data = rsurf
         t_3d.data = rsurf
         ds_out = xa.Dataset({'rTOC': t_3d,
-                             'ac_process_flag': t_2d,
+#                             'ac_process_flag': t_2d,
                         }
         )
-        t_2d.data = ac_flag
-        ds_out['ac_flag'] = t_2d
+#        t_2d.data = ac_flag
+#        ds_out['ac_flag'] = t_2d
         t_3d.data = dev_std
-        ds_out['UrTOC'] = t_3d
+        ds_out['UrTOC_ens'] = t_3d
         t_3d.data = Jrtoa
         ds_out['Jrtoa'] = t_3d
         t_3d.data = Juh2o
@@ -210,8 +238,22 @@ class ISmaccl(object):
         ds_out['Juo3'] = t_3d
         t_3d.data = Jpre
         ds_out['Jpre'] = t_3d
-        t_3d.data = Drsurf
-        ds_out['Drsurf'] = t_3d
+        t_3d.data = Jtaup
+        ds_out['Jtau550'] = t_3d
+#        t_3d.data = Drsurf
+#        ds_out['UrTOC'] = t_3d
+
+        t_3d.data = Duh2o
+        ds_out['Duh2o'] = t_3d
+        t_3d.data = Duo3
+        ds_out['Duo3'] = t_3d
+        t_3d.data = Drtoa
+        ds_out['Drtoa'] = t_3d
+        t_3d.data = Dpre
+        ds_out['Dpre'] = t_3d
+        t_3d.data = Dtaup
+        ds_out['Dtaup'] = t_3d
+
         return ds_out
 
     def exec_smaccl(self,  sza, vza, saa, vaa, taup550, uh2o, uo3, p0, t10m, alt, Dalt, lat, lon, band_data, band_err, frac, frac_aer_model, coeffs, iaero, brdf=None):
@@ -357,11 +399,11 @@ class ISmaccl(object):
 #        rsurf  = np.zeros((NB,GSIZE, Naero), dtype=np.float32)
         rsurf  = np.zeros((NB,GSIZE), dtype=np.float32)
         dev_std = np.zeros((NB,GSIZE), dtype=np.float32)
-        Drsurf = np.zeros((NB,GSIZE), dtype=np.float32)
-        inter  = np.zeros((GSIZE), dtype=np.float32) + np.nan
-        inter_drtoa  = np.zeros((GSIZE), dtype=np.float32) + np.nan
-        inter_dtaup  = np.zeros((GSIZE), dtype=np.float32) + np.nan
-        stock  = np.zeros((GSIZE), dtype=np.float32)
+#        Drsurf = np.zeros((NB,GSIZE), dtype=np.float32)
+#        inter  = np.zeros((GSIZE), dtype=np.float32) + np.nan
+#        inter_drtoa  = np.zeros((GSIZE), dtype=np.float32) + np.nan
+#        inter_dtaup  = np.zeros((GSIZE), dtype=np.float32) + np.nan
+#        stock  = np.zeros((GSIZE), dtype=np.float32)
 
 #        if self.breakpoint:
 #        Jrtoa  = np.zeros((NB,SIZE1,SIZE2), dtype=np.float32)
@@ -414,76 +456,58 @@ class ISmaccl(object):
 
         for i in range(NB):
 #            for j in range(Naero):
-            inter  = rsurf_ext[i,:GSIZE]
+#            inter  = rsurf_ext[i,:GSIZE]
 #                rsurf[i,:,:,j] = inter[:,:]
-            rsurf[i,:] = inter
-            inter  = dev_std_ext[i,:GSIZE]
-            dev_std[i,:] = inter
+            rsurf[i,:] = rsurf_ext[i,:GSIZE]
+#            Drsurf[i,:]= inter
+#            inter  = dev_std_ext[i,:GSIZE]
+#            stock = inter*inter
+            dev_std[i,:] = dev_std_ext[i,:GSIZE]
 
-            inter  = abs(Jrtoa_ext[i,:GSIZE]  * rtoa_err[i,:]               ) # it is 0 because no input error
-#            if self.breakpoint: 
-            inter_drtoa = abs(Jrtoa_ext[i,:GSIZE])
-#            Drtoa[i,:,:] = inter_drtoa
-            Drtoa[i,:] = inter_drtoa
-            stock        = inter**2
-            inter  = abs(Jtaup_ext[i,:GSIZE] * (Etaup + ERtaup * taup550  ))
-#            if self.breakpoint: 
-            inter_dtaup = abs(Jtaup_ext[i,:GSIZE])
-#            Dtaup[i,:,:] = inter_dtaup
-            Dtaup[i,:] = inter_dtaup
-            stock       += inter**2
-            inter  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
-            #if self.breakpoint: 
-#            Duo3[i,:,:]  = inter
-            Duo3[i,:]  = inter
-            stock       += inter**2
-            inter  = abs(Juh2o_ext[i,:GSIZE] * (Euh2o + ERuh2o * uh2o     ))
+#            inter  = abs(Jrtoa_ext[i,:GSIZE]  * rtoa_err[i,:]               ) # it is 0 because no input error
+#            inter_drtoa = rtoa_err[i,:]
+            Drtoa[i,:] = rtoa_err[i,:]
+            Jrtoa[i,:] = Jrtoa_ext[i,:GSIZE]
+#            stock        += inter**2
+
+#            inter_dtaup = rsme_aod(taup550, Etaup, ERtaup)
+#            inter  = abs(Jtaup_ext[i,:GSIZE] * inter_dtaup)
+            Dtaup[i,:] = rsme_aod(taup550, Etaup, ERtaup)
+            Jtaup[i,:] = Jtaup_ext[i,:GSIZE]
+#            stock       += inter**2
+
+#            inter  = abs(Juo3_ext[i,:GSIZE]  * (Euo3  + ERuo3  * uo3      ))
+            Duo3[i,:]  = Euo3  + ERuo3  * uo3
+            Juo3[i,:]  = Juo3_ext[i,:GSIZE]
+#            stock       += inter**2
+#            inter  = abs(Juh2o_ext[i,:GSIZE] * (Euh2o + ERuh2o * uh2o     ))
             #if self.breakpoint: 
 #            Duh2o[i,:,:] = inter
-            Duh2o[i,:] = inter
-            stock       += inter**2
-            inter  = abs(Jpre_ext[i,:GSIZE] *  pressure_err)
+            Duh2o[i,:] = Euh2o + ERuh2o * uh2o
+            Juh2o[i,:] = Juh2o_ext[i,:GSIZE]
+#            stock       += inter**2
+#            inter  = abs(Jpre_ext[i,:GSIZE] *  pressure_err)
             #if self.breakpoint: 
 #            Dpre[i,:,:]  = inter
-            Dpre[i,:]  = inter
-            stock       += inter**2
+            Dpre[i,:]  = pressure_err
+            Jpre[i,:]  = Jpre_ext[i,:GSIZE]
+#            stock       += inter**2
 
-            inter  = np.sqrt(stock)
+#            inter  = np.sqrt(stock)
 #            Drsurf[i,:,:]= inter
-            Drsurf[i,:]= inter
 
 #            if self.breakpoint:
-            inter  = Jrtoa_ext[i,:GSIZE]
+#            inter  = Jrtoa_ext[i,:GSIZE]
 #            Jrtoa[i,:,:] = inter
-            Jrtoa[i,:] = inter
-            inter  = Juo3_ext[i,:GSIZE]
+#            Jrtoa[i,:] = inter
+#            inter  = Juo3_ext[i,:GSIZE]
 #            Juo3[i,:,:]  = inter
-            Juo3[i,:]  = inter
-            inter  = Juh2o_ext[i,:GSIZE]
+#            inter  = Juh2o_ext[i,:GSIZE]
 #            Juh2o[i,:,:] = inter
-            Juh2o[i,:] = inter
-            inter  = Jpre_ext[i,:GSIZE]
+#            inter  = Jpre_ext[i,:GSIZE]
 #            Jpre[i,:,:]  = inter
-            Jpre[i,:]  = inter
-            inter  = Jtaup_ext[i,:GSIZE]
+#            inter  = Jtaup_ext[i,:GSIZE]
 #            Jtaup[i,:,:] = inter
-            Jtaup[i,:] = inter
 
-        return rsurf, dev_std, Juh2o, Juo3, Jrtoa, Jpre, Drsurf
-        ds_out = xa.Dataset(
-            {
-                'rsurf': (('bands','Y','X','aer_model'), rsurf),
-                'Juh2o': (('bands','Y','X'), Juh2o),
-                'Juo3': (('bands','Y','X'), Juo3),
-                'Jrtoa': (('bands','Y','X'), Jrtoa),
-                'Jpre': (('bands','Y','X'), Jpre),
-                'Drsurf': (('bands','Y','X'), Drsurf),
-            },
-            coords={
-                'bands': np.arange(1, NB+1),
-                'Y': np.arange(SIZE1),
-                'X': np.arange(SIZE2),
-                'aer_model': np.arange(1, Naero+1),
-            }
-        )
-        return ds_out 
+#        return rsurf, dev_std, Juh2o, Juo3, Jrtoa, Jpre, Jtaup, Drsurf, Duh2o, Duo3, Drtoa, Dpre, Dtaup
+        return rsurf, dev_std, Juh2o, Juo3, Jrtoa, Jpre, Jtaup, Duh2o, Duo3, Drtoa, Dpre, Dtaup
