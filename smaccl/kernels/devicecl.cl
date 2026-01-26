@@ -112,7 +112,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float us,uv,dphi;
 
     float crd=180./M_PI;
-    float cdr=M_PI/180.;
+        float cdr=M_PI/180.;
 
     float to3,th2o,to2, tco2;
     float tco, tno2,tch4;
@@ -357,7 +357,9 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                         if (ir==1) Jtaup[ii] = -rsurf[ii];
                         if (ir==2) {
                             Jpre[ii]  += rsurf[ii];
+                            Jpre[ii]  /= dpre;
                             Jtaup[ii] += rsurf[ii];
+                            Jtaup[ii] /= dtau;
                         }
                     }
                 } // main loop (ir)

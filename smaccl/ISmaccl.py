@@ -9,8 +9,8 @@ import dask.array as da
 __module__    = "ISmaccl.py"    
 __version__   = "1.01.00"
 
-def rsme_aod(tau_550, sigma_base, sigma_rel):
-    return np.maximum(sigma_base, sigma_rel*tau_550)
+#def rsme_aod(tau_550, sigma_base, sigma_rel):
+#    return np.maximum(sigma_base, sigma_rel*tau_550)
 
 class ISmaccl(object):
     """
@@ -203,7 +203,6 @@ class ISmaccl(object):
             Jrtoa[:, good[0], good[1]] = toc_data[4]
             Jpre[:, good[0], good[1]] = toc_data[5]
             Jtaup[:, good[0], good[1]] = toc_data[6]
-#            Drsurf[:, good[0], good[1]] = toc_data[7]
             Duh2o[:, good[0], good[1]] = toc_data[7]
             Duo3[:, good[0], good[1]] = toc_data[8]
             Drtoa[:, good[0], good[1]] = toc_data[9]
@@ -309,13 +308,15 @@ class ISmaccl(object):
         ERuh2o = self.config['eruh2o']
         # pressure correction for surface altitude and transformation from Pa to hPa
 
-        pressure = Ps(alt, p0*k_p0, t10m)
+#        pressure = Ps(alt, p0*k_p0, t10m)
+        pressure = Ps(alt, p0, t10m)
         # quadratic mean of error due to met fields (Epre) and error due to altitude (Dalt)
-        pressure_err = np.sqrt((dPsdz(alt, p0*k_p0, t10m) * Dalt)**2 + Epre**2)/2.
+#        pressure_err = np.sqrt((dPsdz(alt, p0*k_p0, t10m) * Dalt)**2 + Epre**2)/2.
+        pressure_err = np.sqrt((dPsdz(alt, p0, t10m) * Dalt)**2 + Epre**2)/2.
         # conversion from kg.m-2 to g.cm-2
-        uh2o *= k_uh2o
+#        uh2o *= k_uh2o
         # conversion from Dobson to cm.atm 
-        uo3  *= k_uo3
+#        uo3  *= k_uo3
 
         # prepare radiometry array
 #        rtoa = band_data[:, good[0], good[1]]
@@ -467,7 +468,8 @@ class ISmaccl(object):
 
 #            inter_dtaup = rsme_aod(taup550, Etaup, ERtaup)
 #            inter  = abs(Jtaup_ext[i,:GSIZE] * inter_dtaup)
-            Dtaup[i,:] = rsme_aod(taup550, Etaup, ERtaup)
+#            Dtaup[i,:] = rsme_aod(taup550, Etaup, ERtaup)
+            Dtaup[i,:] = np.maximum(Etaup, taup550*ERtaup)
             Jtaup[i,:] = Jtaup_ext[i,:GSIZE]
 #            stock       += inter**2
 
