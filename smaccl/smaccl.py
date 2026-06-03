@@ -558,6 +558,7 @@ class Smaccl(object):
         #output arrays
 #        rsurf = np.empty_like(rtoa)
         rsurf = np.empty(shp, dtype=np.float32)
+        rsurf_0 = np.empty(shp, dtype=np.float32)
         dev_std = np.empty_like(rtoa, dtype=np.float32)
         Jrtoa = np.empty_like(rtoa, dtype=np.float32)
         Juo3  = np.empty_like(rtoa, dtype=np.float32)
@@ -566,6 +567,7 @@ class Smaccl(object):
         Jtaup = np.empty_like(rtoa, dtype=np.float32)
         
         rsurfd   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=rsurf)
+        rsurf_0d = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=rsurf_0)
         dev_stdd = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=dev_std)
         Jrtoad   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jrtoa)
         Juo3d    = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Juo3)
@@ -602,6 +604,7 @@ class Smaccl(object):
         clpression, 
         clrtoa, 
         rsurfd,
+        rsurf_0d,
         dev_stdd,
         Jrtoad,
         Juo3d,
@@ -619,6 +622,7 @@ class Smaccl(object):
         )
         
         cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
+        cl.enqueue_copy(self.clqueue, rsurf_0, rsurf_0d)
         cl.enqueue_copy(self.clqueue, dev_std, dev_stdd)
         cl.enqueue_copy(self.clqueue, Jrtoa, Jrtoad)
         cl.enqueue_copy(self.clqueue, Juo3, Juo3d)
@@ -628,7 +632,7 @@ class Smaccl(object):
  
         print(".... Smaccl: Smaccl  kernel (run) end  ")
         
-        return ( rsurf, dev_std, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
+        return ( rsurf, rsurf_0, dev_std, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
 
     def set_queue(self, xpu='GPU', environment='Default'):
         typedevice={

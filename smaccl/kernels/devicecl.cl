@@ -74,7 +74,7 @@ float F2_rtls(float ths, float thv, float phi ){  //  rossthick-lisparse, only F
 
 __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global float *tetav_, __global float *phis_, __global float *phiv_, 
                      __global float *uh2o_, __global float *uo3_, __global float *taup550_, __global float *pression_, __global float *rtoa_,
-                     __global float *rsurf, __global float *dev_std, __global float *Jr, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
+                     __global float *rsurf, __global float *rsurf_0, __global float *dev_std, __global float *Jr, __global float *Juo3, __global float *Juh2o, __global float *Jpre, 
                      __global float *Jtaup, 
                      __global float *k1p_, __global float *k2p_,
                      __global short *iaero, int NMOD, 
@@ -117,7 +117,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float to3,th2o,to2, tco2;
     float tco, tno2,tch4;
     float ttetas,ttetav,ksiD;
-    float tdirtetas,tdirtetav,tdiftetas,tdiftetav,trans_atm;
+    float tdirtetas,tdirtetav,tdiftetas,tdiftetav,trans_atm,trans_atm_0;
     float atm_ref;
 
     float ak2, ak, e, f, dp, d, b, del, ww, ss, q1, q2, q3, c1, c2, cp1 ;
@@ -129,7 +129,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
     float Res_ray, Res_aer, Res_6s;
     float ray_phase, ray_ref, aer_ref, aer_phase ;
     short iAero = 0;
-    float toc, toc_mean, toc_std;
+    float toc, toc_mean, toc_std, toc_0;
 
     unsigned long int irt;
 
@@ -312,11 +312,14 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                                 (tdirtetav*tdiftetas) * (ref_surf_bar_downN) +
                                 (tdiftetav*tdirtetas) * (ref_surf_bar_upN) +
                                 (tdiftetav*tdiftetas) * (ref_surf_bar_barN);
+                    trans_atm_0 = (tdirtetav*tdirtetas) + (tdirtetav*tdiftetas) + (tdiftetav*tdirtetas) + (tdiftetav*tdiftetas);
 //                    rsurf[irt] = rsurf[irt] / ( (tg * trans_atm) + (rsurf[irt] * s) ) ;
+                    toc_0 = toc / ( (tg * trans_atm_0) + (toc * s) ) ;
                     toc = toc / ( (tg * trans_atm) + (toc * s) ) ;
                     
                     if (ia==0) {
                         rsurf[ii] = toc;
+                        rsurf_0[ii] = toc_0;
                         /* Analytical Jacobian of surface reflectance vs toa reflectance*/
                         /*------------------------*/
                         float ttt   = tg * trans_atm;

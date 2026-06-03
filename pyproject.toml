@@ -42,3 +42,5 @@ netcdf4 = "*"
 h5netcdf = "*"
 jax = '*'
 dask = "*"
+rasterio = '*'
+ONNXRuntime = '*'
