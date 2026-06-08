@@ -1,4 +1,4 @@
-from .smaccl.smaccl import Smaccl
+from .smaccl import Smaccl
 import numpy as np
 #from .c3s_lib import set_ac_flag, closest_model_vito, pre_brdf, Ps, dPsdzQ, closest_models
 from .c3s_lib import set_ac_flag, Ps, closest_models, dPsdz, closest_model
