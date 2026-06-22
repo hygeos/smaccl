@@ -6,7 +6,6 @@ dependencies = [
     "xarray", 
     "pyopencl", 
     "h5py",
-    "core @ git+https://github.com/hygeos/core.git",
     "scipy",
 #    "smac-neo @ git+https://github.com/hygeos/smac-neo.git"
     ]
@@ -26,7 +25,7 @@ build-backend = "poetry.core.masonry.api"
 [tool.pixi.tasks]
 tests = "pytest tests/"
 
-#[tool.pixi.pypi-dependencies]
+[tool.pixi.pypi-dependencies]
 #smaccl = { path = ".", editable = true }
 #smac-neo = { path = "/mnt/qnaphome/bruno/Projets/smac-neo", editable = true }
 
