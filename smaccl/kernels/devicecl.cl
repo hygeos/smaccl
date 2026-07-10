@@ -373,7 +373,7 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
             } // main loop (ia)
             toc_mean /= (float)(XNaerod -1);
             toc_std /= (float)(XNaerod -1);
-            dev_std[ii] = sqrt( abs(toc_std - toc_mean*toc_mean ));
+            dev_std[ii] = sqrt( fabsf(toc_std - toc_mean*toc_mean ));
         } // main loop (ib)
     } // main loop (ip)
 
