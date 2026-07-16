@@ -1,0 +1,28 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "SMACCL"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: getting-started.qmd
+        text: Getting Started
+      - href: configuration.qmd
+        text: Configuration
+      - href: workflow.qmd
+        text: Workflow
+      - href: api.qmd
+        text: API Reference
+      - href: development.qmd
+        text: Development
+      - href: OPTIMIZED_BRANCH_REPORT.md
+        text: Optimized Branch Report
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    number-sections: false

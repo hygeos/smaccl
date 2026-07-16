@@ -1,0 +1,37 @@
+---
+title: "Processing Workflow"
+---
+
+## High-Level Pipeline
+
+1. Parse configuration
+2. Initialize DEM and correction engine
+3. Read sensor product metadata and allocate output
+4. Iterate scene chunks
+5. Interpolate ancillary fields onto observation geometry
+6. Compute aerosol model assignment
+7. Run OpenCL correction kernel
+8. Aggregate corrected outputs and uncertainties
+9. Write NetCDF output
+
+## Key Runtime Modules
+
+- `smaccl/c3s_smaccl.py`
+- `smaccl/smaccl.py`
+- `smaccl/ISmaccl.py`
+
+## Chunked Processing
+
+Chunking is controlled by `imsize` and `nbchunk` from config files. For each chunk,
+SMACCL:
+
+- Loads band/radiometry + geometry arrays
+- Filters valid pixels (for example, by SZA constraints)
+- Builds dense kernel input tensors
+- Executes correction and uncertainty propagation
+- Writes chunk-level outputs
+
+## Outputs
+
+Outputs are NetCDF products containing corrected reflectance-like variables and
+related uncertainty terms produced by the processing chain.

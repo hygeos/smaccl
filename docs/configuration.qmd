@@ -1,0 +1,67 @@
+---
+title: "Configuration Reference"
+---
+
+SMACCL processing is configured through INI-style `.cfg` files.
+
+## Sections
+
+### `[Paths]`
+
+Expected keys include:
+
+- `input`: path to the L2 input product
+- `output`: path to output NetCDF
+- `merraaero`: MERRA2 aerosol file
+- `merraptwo`: MERRA2 pressure/water-vapor/ozone file
+- `smaccoef_dir`: directory containing SMAC coefficient files
+- `smaccoef_version`: coefficient version
+- `dem`: DEM source path
+- `faer`: aerosol model fraction file
+
+Optional keys may include:
+
+- `cams`: CAMS ancillary source
+- `brdf`: BRDF lookup source
+
+### `[Sensor]`
+
+Typical keys:
+
+- `platform`
+- `sensor`
+- `bands`
+- `resolution` (for some sensors)
+
+### `[Coefficients]`
+
+Atmospheric and uncertainty scaling terms, for example:
+
+- `k_uh2o`, `k_uo3`, `k_p0`
+- `Etoa`, `ERtoa`
+- `Etaup`, `ERtaup`
+- `Euo3`, `ERuo3`
+- `Euh2o`, `ERuh2o`
+- `Epre`, `ERpre`
+- `taot`
+
+### `[Sizes]`
+
+Chunking/runtime controls:
+
+- `imsize`
+- `nbchunk`
+
+### `[Output]`
+
+Output switches such as:
+
+- `Jacobien` (boolean-like flag in current implementation)
+
+## Included Examples
+
+- `c3s_config.cfg`
+- `c3s_probav_config.cfg`
+- `viirs_config.cfg`
+
+Use these as templates and adapt paths to your environment.

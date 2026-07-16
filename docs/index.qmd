@@ -1,0 +1,40 @@
+---
+title: "SMACCL Documentation"
+---
+
+## Overview
+
+SMACCL is a Python/OpenCL implementation of atmospheric correction workflows based
+on the SMAC model family. The repository contains:
+
+- Core correction kernels and runtime in `smaccl/`
+- Sensor-specific readers/writers and processing orchestration
+- Configuration files for representative processing scenarios
+- Tests and notebooks for development and validation
+
+## What This Project Solves
+
+SMACCL transforms top-of-atmosphere observations into surface reflectance-related
+products while propagating uncertainty terms used by downstream pipelines.
+
+## Main Components
+
+- `smaccl/smaccl.py`: low-level OpenCL-backed correction engine (`Smaccl`)
+- `smaccl/ISmaccl.py`: high-level interface and xarray-oriented execution (`ISmaccl`)
+- `smaccl/c3s_smaccl.py`: end-to-end processing entrypoint driven by config files
+- `smaccl/c3s_io.py` and `smaccl/c3s_io_modis.py`: sensor I/O helpers
+- `smaccl/c3s_lib.py`: ancillary and geophysical utility functions
+
+## Typical Execution Path
+
+1. Load a config file (paths, coefficients, sensor/platform, output switches)
+2. Load scene data and ancillary datasets (MERRA2/CAMS, DEM, aerosol fractions)
+3. Run chunked correction via `Smaccl` kernels
+4. Write corrected outputs and uncertainty variables to NetCDF
+
+## Next Steps
+
+- Continue with [Getting Started](getting-started.qmd)
+- Review required fields in [Configuration](configuration.qmd)
+- Understand processing stages in [Workflow](workflow.qmd)
+- Browse callable interfaces in [API Reference](api.qmd)

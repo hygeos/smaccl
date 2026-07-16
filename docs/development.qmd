@@ -1,0 +1,53 @@
+---
+title: "Development"
+---
+
+## Project Layout
+
+- `smaccl/`: package source code and kernels
+- `tests/`: test suite
+- `notebooks/`: exploratory notebooks
+- `docs/`: Quarto documentation source
+
+## Local Development
+
+Install in editable mode:
+
+```bash
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e .
+```
+
+Run tests:
+
+```bash
+pytest tests/
+```
+
+## OpenCL Notes
+
+The correction backend relies on OpenCL. Development machines need:
+
+- A working OpenCL ICD/driver
+- Python bindings (`pyopencl`) available in the environment
+
+## Documentation Workflow
+
+Build docs:
+
+```bash
+quarto render docs
+```
+
+Live preview:
+
+```bash
+quarto preview docs
+```
+
+## Contribution Guidance
+
+- Keep configuration examples runnable with clear paths
+- Add/adjust tests with code changes where practical
+- Update Quarto docs when changing processing logic or interfaces

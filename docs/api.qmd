@@ -1,0 +1,306 @@
+---
+title: "API Reference"
+---
+
+## Scope
+
+This page documents the main callable API in the `smaccl` package and related
+pipeline modules used by this repository.
+
+## Core Correction API
+
+### Module: `smaccl/smaccl.py`
+
+#### `get_smac_coeffs(coeff_array_file, bandidx=None)`
+
+Load SMAC coefficients from a NumPy array file and optionally select a subset
+of bands.
+
+- `coeff_array_file`: path to coefficient array (`.npy`)
+- `bandidx`: optional band index selection
+- Returns: coefficient array ready for kernel input
+
+#### `get_smac_coeffs_fromtxt(bands)`
+
+Build/load coefficient structures from text-based coefficient definitions for
+provided bands.
+
+- `bands`: iterable of band identifiers
+- Returns: coefficient structure compatible with `Smaccl.run`
+
+#### `class coeff`
+
+Container class representing one SMAC coefficient set.
+
+#### `class Smaccl`
+
+OpenCL-backed correction engine.
+
+Common usage pattern:
+
+```python
+from smaccl.smaccl import Smaccl
+
+S = Smaccl("CPU")
+rsurf, Jrtoa, Juo3, Juh2o, Jpre, Jtaup = S.run(
+    coeffs,
+    tetas,
+    tetav,
+    phis,
+    phiv,
+    uh2o,
+    uo3,
+    taup550,
+    pressure,
+    rtoa,
+    k1p,
+    k2p,
+    iaero,
+    XBLOCK=512,
+    XGRID=512,
+    NBLOOP=1,
+)
+```
+
+Important behavior:
+
+- Uses OpenCL kernels from `smaccl/kernels/devicecl.cl`
+- Returns corrected reflectance and Jacobians used for uncertainty propagation
+- Performance profiling can be toggled with environment variable `SMACCL_PROFILE`
+
+## High-Level Interface API
+
+### Module: `smaccl/ISmaccl.py`
+
+#### `class ISmaccl`
+
+High-level wrapper around `Smaccl` for xarray/dask workflows.
+
+#### `ISmaccl.__init__(config, frac_aer_model, ca, XBLOCK=128, XGRID=128, breakpoint=False, ancillary=False, **kwargs)`
+
+Initialize a configured interface object.
+
+- `config`: processing/config dictionary
+- `frac_aer_model`: aerosol model fraction reference table
+- `ca`: ancillary model/coeff mapping used by downstream calls
+- `kwargs['platform']`: expected OpenCL platform target
+
+#### `ISmaccl.run_block(l2_data, batch_size=512)`
+
+Run correction on chunked xarray data using `xarray.map_blocks`.
+
+- `l2_data`: xarray dataset containing required variables
+- `batch_size`: chunk fallback when dataset is not already chunked
+- Returns: xarray dataset with corrected outputs and Jacobians
+
+#### `ISmaccl.run(l2_data, iaero)`
+
+Run correction on one in-memory block.
+
+- `l2_data`: input block dataset
+- `iaero`: aerosol model indices per pixel
+- Returns: xarray dataset (`rTOC`, uncertainty and Jacobian fields)
+
+## End-to-End Pipeline API
+
+### Module: `smaccl/c3s_smaccl.py`
+
+#### `readConfig(configfile)`
+
+Read INI-style config file into a typed Python dictionary.
+
+#### `process(config, dem, S, BREAKPOINT=False, ANCILLARY=False)`
+
+Main processing routine used by command-line execution.
+
+- Loads sensor data by chunk
+- Interpolates ancillary datasets
+- Runs correction via `Smaccl`
+- Writes output through NetCDF helpers
+
+#### `main(configfile)`
+
+CLI-oriented entrypoint.
+
+Typical invocation:
+
+```bash
+python -m smaccl.c3s_smaccl c3s_config.cfg
+```
+
+## Sensor I/O API
+
+### Module: `smaccl/c3s_io.py`
+
+Primary readers/loaders:
+
+- `load_probav(...)`
+- `load_avhrr(...)`
+- `load_olci_slstr(...)`
+- `load_msi(...)`
+- `load_oli(...)`
+- `load_viirs(...)`
+- `load_modis(...)`
+
+Support helpers:
+
+- `create_nc(...)`: create output NetCDF structure
+- `save_nc(...)`: write chunk results to output dataset
+- `get_info_probav(...)`, `get_info_testcase_vito(...)`
+
+### Module: `smaccl/c3s_io_modis.py`
+
+- `load_modis(...)`: MODIS-specific loader
+- `set_smac_indice(...)`: map configured bands to coefficient indices
+
+## Ancillary/Physics Utilities API
+
+### Module: `smaccl/c3s_lib.py`
+
+Most commonly used pipeline helpers:
+
+- `pre_merra2(faero, fptwo)`
+- `load_cams(filename)`
+- `pre_aer_models(faer)`
+- `closest_model(X, Xb)`
+- `closest_models(X, Xb, Nmodels=10)`
+- `Ps(z, p0, T, ...)`
+- `dPsdz(z, p0, T, ...)`
+- `set_ac_flag(aot, sza, vza, climato)`
+- `SRF(sensor=None, camera=None)`
+
+## Climate-Zone AOD Utilities
+
+### Module: `smaccl/KG_AOD.py`
+
+- `class KoppenGeiger`
+- `get_KG(lat, lon, return_label=False)`
+- `get_aod_uncertainty_multiplier(lat, lon, _kg_instance)`
+- `get_u_AOD550_regional(lat, lon, AOD550, base_uncertainty=0.03)`
+
+## Notes
+
+- Some modules are tightly coupled to expected data formats and external
+  ancillary datasets.
+- Function signatures in this page are intentionally concise; refer to source
+  for full implementation details and edge-case behavior.
+
+## Kernel API (OpenCL)
+
+Primary kernel source used at runtime:
+
+- `smaccl/kernels/devicecl.cl`
+
+The Python engine (`Smaccl`) compiles and launches kernels from this file.
+
+### Data Structure
+
+#### `typedef struct coef_atmos`
+
+Per-band atmospheric coefficient set consumed by both kernels.
+
+- Host-side layout must match this struct exactly.
+- The `ca` buffer is organized as `NBAND * NMOD` entries, band-major.
+
+### Helper Functions
+
+#### `float F1_rtls(float ths, float thv, float phi)`
+
+Ross-Thick / Li-Sparse geometric BRDF kernel ($F_1$).
+
+- Inputs are angles in radians.
+- Returns the geometric kernel value for BRDF coupling.
+
+#### `float F2_rtls(float ths, float thv, float phi)`
+
+Ross-Thick volumetric BRDF kernel ($F_2$).
+
+- Inputs are angles in radians.
+- Returns the volumetric kernel value for BRDF coupling.
+
+### Kernel Entry Points
+
+#### `__kernel void smaccl(...)`
+
+Inverse model kernel (TOA to surface reflectance).
+
+Signature:
+
+```c
+__kernel void smaccl(
+    __global coef_atmos *ca,
+    __global float *tetas_, __global float *tetav_,
+    __global float *phis_,  __global float *phiv_,
+    __global float *uh2o_,  __global float *uo3_,
+    __global float *taup550_, __global float *pression_,
+    __global float *rtoa_,
+    __global float *rsurf, __global float *rsurf_0,
+    __global float *dev_std,
+    __global float *Jr, __global float *Juo3,
+    __global float *Juh2o, __global float *Jpre,
+    __global float *Jtaup,
+    __global float *k1p_, __global float *k2p_,
+    __global short *iaero, int NMOD,
+    int NBLOOPd, int NBANDd, int NZd, int Naerod
+)
+```
+
+Inputs:
+
+- Geometry: `tetas_`, `tetav_`, `phis_`, `phiv_` (degrees)
+- Ancillary: `uh2o_`, `uo3_`, `taup550_`, `pression_`
+- Radiometry: `rtoa_`
+- BRDF terms: `k1p_`, `k2p_`
+- Aerosol model index tensor: `iaero`
+
+Outputs:
+
+- `rsurf`: corrected surface reflectance
+- `rsurf_0`: corrected reflectance without BRDF coupling term
+- `dev_std`: aerosol-ensemble spread
+- Jacobians: `Jr`, `Juo3`, `Juh2o`, `Jpre`, `Jtaup`
+
+#### `__kernel void smaccl_dir(...)`
+
+Forward model kernel (surface reflectance to TOA reflectance/Jacobians).
+
+Signature:
+
+```c
+__kernel void smaccl_dir(
+    __global coef_atmos *ca,
+    __global float *tetas_, __global float *tetav_,
+    __global float *phis_,  __global float *phiv_,
+    __global float *uh2o_,  __global float *uo3_,
+    __global float *taup550_, __global float *pression_,
+    __global float *rtoa,
+    __global float *rsurf_,
+    __global float *Jr, __global float *Juo3,
+    __global float *Juh2o, __global float *Jpre,
+    __global float *Jtaup,
+    __global float *k1p_, __global float *k2p_,
+    __global int *iaero, int NMOD,
+    int NBLOOPd, int NBANDd, int NZd
+)
+```
+
+Inputs:
+
+- Same geometry/ancillary/BRDF conventions as `smaccl`
+- `rsurf_`: input surface reflectance
+
+Outputs:
+
+- `rtoa`: simulated top-of-atmosphere reflectance
+- Jacobians: `Jr`, `Juo3`, `Juh2o`, `Jpre`, `Jtaup`
+
+### Indexing and Shapes
+
+For both kernels, flattened indexing follows:
+
+- `M = global_size(0) * global_size(1)`
+- Per-pixel index in a chunk-depth slice: `idx = gid0 * gs1 + gid1`
+- Pixel-depth offset: `jj = idx + ip * M`
+- Band/pixel-depth offset: `ii = idx + ip * M + ib * M * NZd`
+
+This is the convention host buffers must follow before enqueueing kernel calls.

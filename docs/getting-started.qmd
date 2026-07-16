@@ -1,0 +1,60 @@
+---
+title: "Getting Started"
+---
+
+## Prerequisites
+
+- Python 3.10+
+- OpenCL runtime/driver available on the host
+- Quarto (for documentation rendering)
+
+## Install
+
+### Option A: uv
+
+```bash
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e .
+```
+
+### Option B: pixi
+
+```bash
+pixi install
+```
+
+## Run SMACCL
+
+Main processing module:
+
+```bash
+python -m smaccl.c3s_smaccl <config_file>
+```
+
+Examples:
+
+```bash
+python -m smaccl.c3s_smaccl c3s_config.cfg
+python -m smaccl.c3s_smaccl c3s_probav_config.cfg
+python -m smaccl.c3s_smaccl viirs_config.cfg
+```
+
+## Run Tests
+
+```bash
+pytest tests/
+```
+
+or
+
+```bash
+pixi run tests
+```
+
+## Render Documentation
+
+```bash
+quarto render docs
+quarto preview docs
+```
