@@ -8,6 +8,8 @@
 from __future__ import print_function, division
 import numpy as np
 import os
+import time as _time
+import atexit
 from os.path import dirname, realpath, join, exists
 import pyopencl as cl
 import sys
@@ -18,6 +20,29 @@ __module__    = "smaccl.py"
 __version__   = "1.01.00"
 
 print(__module__ + ' ' + __version__)
+
+# --- Optional fine-grained profiling of smaccl.run (gated by env SMACCL_PROFILE).
+# Accumulates wall time per phase; an atexit hook prints the summary. Inert unless
+# the env var is set, so it is safe to leave in place.
+_PROFILE = {'calls': 0, 'host_alloc': 0.0, 'in_h2d': 0.0,
+            'kernel': 0.0, 'out_d2h': 0.0}
+
+
+def _print_smaccl_profile():
+    n = _PROFILE['calls']
+    if not n:
+        return
+    tot = sum(v for k, v in _PROFILE.items() if k != 'calls')
+    print("\n---- smaccl.run internal breakdown ({} kernel launches) ----".format(n))
+    for name in ('host_alloc', 'in_h2d', 'kernel', 'out_d2h'):
+        t = _PROFILE[name]
+        print("  {:12s} {:8.1f}s  {:7.3f}s/launch  {:5.1f}%".format(
+            name, t, t / n, 100 * t / tot if tot else 0.0))
+    print("  {:12s} {:8.1f}s  {:7.3f}s/launch".format('total', tot, tot / n))
+
+
+atexit.register(_print_smaccl_profile)
+
 
 # set up directories
 dir_root = dirname(realpath(__file__))
@@ -436,7 +461,7 @@ class Smaccl(object):
             
 #            print ('... Build program')
             try:
-                program.build()
+                program.build(options=['-cl-mad-enable'])
             except:
                 print('-E- error building program')
                 print(program.get_build_info(self.cldevice, cl.program_build_info.LOG))
@@ -557,6 +582,9 @@ class Smaccl(object):
 
         #output arrays
 #        rsurf = np.empty_like(rtoa)
+        _prof = os.environ.get('SMACCL_PROFILE')
+        if _prof:
+            _tA = _time.perf_counter()
         rsurf = np.empty(shp, dtype=np.float32)
         rsurf_0 = np.empty(shp, dtype=np.float32)
         dev_std = np.empty_like(rtoa, dtype=np.float32)
@@ -575,6 +603,8 @@ class Smaccl(object):
         Jpred    = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jpre)
         Jtaupd   = self.createOutputArrayFromBuffer(shp, dtype=np.float32, buf=Jtaup)
 
+        if _prof:
+            _tB = _time.perf_counter()
         clcoeffs   = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=coeffs)
         cltetas    = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=tetas)
         cltetav    = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=tetav)
@@ -590,6 +620,9 @@ class Smaccl(object):
         clk2p      = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=k2p)
         claero     = cl.Buffer(self.clcontext, cl.mem_flags.COPY_HOST_PTR, hostbuf=iaero)
         
+        if _prof:
+            self.clqueue.finish()
+            _tC = _time.perf_counter()
         print(".... Smaccl: Smaccl  kernel (run) begin  ")
 
         exec_evt = self.kernel(self.clqueue, (shp[2],shp[3]), None, 
@@ -621,6 +654,9 @@ class Smaccl(object):
         np.int32(Naero)
         )
         
+        if _prof:
+            self.clqueue.finish()
+            _tD = _time.perf_counter()
         cl.enqueue_copy(self.clqueue, rsurf, rsurfd)
         cl.enqueue_copy(self.clqueue, rsurf_0, rsurf_0d)
         cl.enqueue_copy(self.clqueue, dev_std, dev_stdd)
@@ -630,6 +666,14 @@ class Smaccl(object):
         cl.enqueue_copy(self.clqueue, Jpre, Jpred)
         cl.enqueue_copy(self.clqueue, Jtaup, Jtaupd)
  
+        if _prof:
+            self.clqueue.finish()
+            _tE = _time.perf_counter()
+            _PROFILE['calls'] += 1
+            _PROFILE['host_alloc'] += _tB - _tA
+            _PROFILE['in_h2d'] += _tC - _tB
+            _PROFILE['kernel'] += _tD - _tC
+            _PROFILE['out_d2h'] += _tE - _tD
         print(".... Smaccl: Smaccl  kernel (run) end  ")
         
         return ( rsurf, rsurf_0, dev_std, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )

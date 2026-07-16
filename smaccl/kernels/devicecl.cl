@@ -154,12 +154,55 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
         /* pour 6s on a delta = 0.0279 */
         ray_phase = 0.7190443 * (1. + (cksi*cksi))  + 0.0412742 ;
 
+        /* RTLS BRDF geometric (F1) / volumetric (F2) kernels depend ONLY on the
+           pixel geometry (tetas, tetav, dphi). Hoisted out of the band/aerosol/
+           run loops where they were recomputed 4 x NBAND x Naero x NRUN times
+           per pixel. Bit-identical (pure function of the angles). */
+        float thetas_r = tetas*cdr, thetav_r = tetav*cdr;
+        float ax1d = F1_rtls(thetas_r, thetav_r, dphi);
+        float ax2d = F2_rtls(thetas_r, thetav_r, dphi);
+        float ax1u = F1_rtls(thetav_r, thetas_r, M_PI-dphi);
+        float ax2u = F2_rtls(thetav_r, thetas_r, M_PI-dphi);
+
             // loop on the number of bands
         for (int ib=0; ib<XNBANDd; ib++) {
             unsigned long int ii = idx + ip*M + ib*M*XNZd;
             float rtoa=rtoa_[ii];
             float k1p = k1p_[ii];
             float k2p = k2p_[ii];
+
+            /* Gaseous transmission is aerosol-model INVARIANT (the gas absorption
+               coefficients in ca do not depend on the aerosol model), so compute
+               it ONCE per band using kk0 instead of Naero times inside the model
+               loop. to3/th2o are pressure-invariant; the other gases depend on
+               pressure, which is perturbed only for ir==0 -> precompute the full
+               gas product tg for the base and the pressure-perturbed cases. The
+               multiplication order matches the original tg exactly. */
+            unsigned long int kk0 = ib*NMOD;
+            float to3_g = 1., th2o_g = 1., tg_base = 1., tg_pert = 1.;
+            if( (uh2o> 0.) || ( uo3 > 0.) ) {
+                to3_g  = exp ( (ca[kk0].ao3)  * pow ( (uo3 *m)  , (ca[kk0].no3)  ) ) ;
+                th2o_g = exp ( (ca[kk0].ah2o) * pow ( (uh2o*m)  , (ca[kk0].nh2o) ) ) ;
+            }
+            for (int ig=0; ig<2; ig++) {
+                float prg = (ig==0) ? (pression_[jj]-dpre) : pression_[jj];
+                float Peqg = prg/1013.0;
+                float to2g=1., tco2g=1., tch4g=1., tno2g=1., tcog=1.;
+                if( (uh2o> 0.) || ( uo3 > 0.) ) {
+                    float uo2g = pow (Peqg , (ca[kk0].po2));
+                    float uco2g= pow (Peqg , (ca[kk0].pco2));
+                    float uch4g= pow (Peqg , (ca[kk0].pch4));
+                    float uno2g= pow (Peqg , (ca[kk0].pno2));
+                    float ucog = pow (Peqg , (ca[kk0].pco));
+                    to2g  = exp ( (ca[kk0].ao2)  * pow ( (uo2g *m)  , (ca[kk0].no2)  ) ) ;
+                    tco2g = exp ( (ca[kk0].aco2) * pow ( (uco2g*m)  , (ca[kk0].nco2) ) ) ;
+                    tch4g = exp ( (ca[kk0].ach4) * pow ( (uch4g*m)  , (ca[kk0].nch4) ) ) ;
+                    tno2g = exp ( (ca[kk0].ano2) * pow ( (uno2g*m)  , (ca[kk0].nno2) ) ) ;
+                    tcog  = exp ( (ca[kk0].aco)  * pow ( (ucog *m)  , (ca[kk0].nco)  ) ) ;
+                }
+                float tgg = th2o_g * to3_g * to2g * tco2g * tch4g* tcog * tno2g ;
+                if (ig==0) tg_pert = tgg; else tg_base = tgg;
+            }
 
             toc_mean = 0;
             toc_std = 0;
@@ -181,39 +224,17 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                     /*------  2) aerosol optical depth in the spectral band, taup  */
                     taup = (ca[kk].a0taup) + (ca[kk].a1taup) * taup550 ;
 
-                    /*------  3) gaseous transmissions (downward and upward paths)*/
-                    to2 = 1. ;
-                    tco2= 1. ;
-                    tch4= 1. ;
-                    tno2= 1. ;
-                    tco = 1. ;
-                    to3 = 1. ;
-                    th2o= 1. ;
-
-                    uo2 = pow (Peq , (ca[kk].po2));
-                    uco2= pow (Peq , (ca[kk].pco2));
-                    uch4= pow (Peq , (ca[kk].pch4));
-                    uno2= pow (Peq , (ca[kk].pno2));
-                    uco = pow (Peq , (ca[kk].pco));
-
-                    /*------  4) if uh2o <= 0 and uo3 <= 0 no gaseous absorption is computed*/
-                    if( (uh2o> 0.) || ( uo3 > 0.) )
-                    {
-                        to3   = exp ( (ca[kk].ao3)  * pow ( (uo3 *m)  , (ca[kk].no3)  ) ) ;
-                        th2o  = exp ( (ca[kk].ah2o) * pow ( (uh2o*m)  , (ca[kk].nh2o) ) ) ;
-                        to2   = exp ( (ca[kk].ao2)  * pow ( (uo2 *m)  , (ca[kk].no2)  ) ) ;
-                        tco2  = exp ( (ca[kk].aco2) * pow ( (uco2*m)  , (ca[kk].nco2) ) ) ;
-                        tch4  = exp ( (ca[kk].ach4) * pow ( (uch4*m)  , (ca[kk].nch4) ) ) ;
-                        tno2  = exp ( (ca[kk].ano2) * pow ( (uno2*m)  , (ca[kk].nno2) ) ) ;
-                        tco   = exp ( (ca[kk].aco)  * pow ( (uco *m)  , (ca[kk].nco)  ) ) ;
-                    }
+                    /*------  3,4) gaseous transmissions: precomputed once per band
+                       (aerosol-model invariant); to3/th2o reused for the ozone /
+                       water-vapour Jacobians below. */
+                    to3 = to3_g; th2o = th2o_g;
 
                     /*------  5) Total scattering transmission */
                     ttetas = (ca[kk].a0T) + (ca[kk].a1T)*taup550/us + ((ca[kk].a2T)*Peq + (ca[kk].a3T))/(1.+us) ; /* downward */
                     ttetav = (ca[kk].a0T) + (ca[kk].a1T)*taup550/uv + ((ca[kk].a2T)*Peq + (ca[kk].a3T))/(1.+uv) ; /* upward   */
 
                     /*------  6) spherical albedo of the atmosphere */
-                    s = (ca[kk].a0s) * Peq +  (ca[kk].a3s) + (ca[kk].a1s)*taup550 + (ca[kk].a2s) *pow (taup550 , 2) ;
+                    s = (ca[kk].a0s) * Peq +  (ca[kk].a3s) + (ca[kk].a1s)*taup550 + (ca[kk].a2s) *taup550*taup550 ;
 
 //                    /*------  7) scattering angle cosine */
 //                    cksi = - ( (us*uv) + (sqrt(1. - us*us) * sqrt (1. - uv*uv)*cos(dphi) ) );
@@ -231,8 +252,9 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                     ray_ref   = ( taurz*ray_phase ) / (4.*us*uv) ;
 
                     /*-----------------Residu Rayleigh ---------*/
-                    Res_ray= (ca[kk].Resr1) + (ca[kk].Resr2) * taurz*ray_phase / (us*uv) +
-                     (ca[kk].Resr3) * pow( (taurz*ray_phase/(us*uv)),2);
+                    float rr_ray = taurz*ray_phase/(us*uv);
+                    Res_ray= (ca[kk].Resr1) + (ca[kk].Resr2) * rr_ray +
+                     (ca[kk].Resr3) * rr_ray*rr_ray;
 
                     /*--------9b) Direct and scattering transmssions*/
                     tautot=taup+taurz;
@@ -242,7 +264,8 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                     tdiftetav = ttetav - tdirtetav;
 
                     /*------  10) aerosol atmospheric reflectance */
-                    aer_phase = (ca[kk].a0P) + (ca[kk].a1P)*ksiD + (ca[kk].a2P)*ksiD*ksiD +(ca[kk].a3P)*pow(ksiD,3) + (ca[kk].a4P) * pow(ksiD,4);
+                    float ksi2 = ksiD*ksiD;
+                    aer_phase = (ca[kk].a0P) + (ca[kk].a1P)*ksiD + (ca[kk].a2P)*ksi2 +(ca[kk].a3P)*ksi2*ksiD + (ca[kk].a4P) * ksi2*ksi2;
 
                     ak2 = (1. - (ca[kk].wo))*(3. - (ca[kk].wo)*3*(ca[kk].gc)) ;
                     ak  = sqrt(ak2) ;
@@ -274,36 +297,34 @@ __kernel void smaccl(__global coef_atmos *ca, __global float *tetas_, __global f
                     aer_ref = aer_ref / ( us*uv );
 
                     /*--------Residu Aerosol --------*/
-                    Res_aer= ( (ca[kk].Resa1) + (ca[kk].Resa2) * ( taup * m *cksi ) + (ca[kk].Resa3) * pow( (taup*m*cksi ),2) ) 
-                             + (ca[kk].Resa4) * pow( (taup*m*cksi),3);
+                    float tmc = taup*m*cksi;
+                    Res_aer= ( (ca[kk].Resa1) + (ca[kk].Resa2) * tmc + (ca[kk].Resa3) * tmc*tmc ) 
+                             + (ca[kk].Resa4) * tmc*tmc*tmc;
 
 
                     /*---------Residu 6s-----------*/
-                    Res_6s= ( (ca[kk].Rest1) + (ca[kk].Rest2) * ( tautot * m *cksi )
-                        + (ca[kk].Rest3) * pow( (tautot*m*cksi),2) ) + (ca[kk].Rest4) * pow( (tautot*m*cksi),3);
+                    float ttmc = tautot*m*cksi;
+                    Res_6s= ( (ca[kk].Rest1) + (ca[kk].Rest2) * ttmc
+                        + (ca[kk].Rest3) * ttmc*ttmc ) + (ca[kk].Rest4) * ttmc*ttmc*ttmc;
 
                     /*------  11) total atmospheric reflectance */
                     atm_ref = ray_ref - Res_ray + aer_ref - Res_aer + Res_6s;
 
                     /*-------- reflectance at toa*/
 
-                    tg      = th2o * to3 * to2 * tco2 * tch4* tco * tno2 ;
+                    tg      = (ir==0) ? tg_pert : tg_base ;
 
                      /* reflectance at surface */
                     /*------------------------*/
 //                    rsurf[irt] = rtoa - (atm_ref * tg) ;
                     toc = rtoa - (atm_ref * tg) ;
-                    float ax1 = F1_rtls(tetas*cdr, tetav*cdr, dphi);
-                    float ax2 = F2_rtls(tetas*cdr, tetav*cdr, dphi);
-                    float f1_bar_down = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
-                    float f2_bar_down = ca[kk].f2d0 + ca[kk].f2d1*ax1 + ca[kk].f2d2*ax2; 
-                    float f1_bar_bar  = ca[kk].f1b0 + ca[kk].f1b1*ax1 + ca[kk].f1b2*ax2; 
-                    float f2_bar_bar  = ca[kk].f2b0 + ca[kk].f2b1*ax1 + ca[kk].f2b2*ax2; 
-                    float rs          =  (1. + k1p*ax1 + k2p*ax2);
-                    ax1 = F1_rtls(tetav*cdr, tetas*cdr, M_PI-dphi);
-                    ax2 = F2_rtls(tetav*cdr, tetas*cdr, M_PI-dphi);
-                    float f1_bar_up   = ca[kk].f1d0 + ca[kk].f1d1*ax1 + ca[kk].f1d2*ax2; 
-                    float f2_bar_up   = ca[kk].f2d0 + ca[kk].f2d1*ax1 + ca[kk].f2d2*ax2; 
+                    float f1_bar_down = ca[kk].f1d0 + ca[kk].f1d1*ax1d + ca[kk].f1d2*ax2d; 
+                    float f2_bar_down = ca[kk].f2d0 + ca[kk].f2d1*ax1d + ca[kk].f2d2*ax2d; 
+                    float f1_bar_bar  = ca[kk].f1b0 + ca[kk].f1b1*ax1d + ca[kk].f1b2*ax2d; 
+                    float f2_bar_bar  = ca[kk].f2b0 + ca[kk].f2b1*ax1d + ca[kk].f2b2*ax2d; 
+                    float rs          =  (1. + k1p*ax1d + k2p*ax2d);
+                    float f1_bar_up   = ca[kk].f1d0 + ca[kk].f1d1*ax1u + ca[kk].f1d2*ax2u; 
+                    float f2_bar_up   = ca[kk].f2d0 + ca[kk].f2d1*ax1u + ca[kk].f2d2*ax2u; 
                     /**/
                     float ref_surf_bar_downN= (1. + k1p*f1_bar_down + k2p*f2_bar_down)/rs;
                     float ref_surf_bar_upN  = (1. + k1p*f1_bar_up   + k2p*f2_bar_up)  /rs;
