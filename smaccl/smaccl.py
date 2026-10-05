@@ -470,7 +470,8 @@ class Smaccl(object):
 #            print ('... Load Kernel')
             # load the kernel
             self.kernel = cl.Kernel(program, 'smaccl')
-            
+            self.kernel_dir = cl.Kernel(program, 'smaccl_dir')
+
         elif exists(binname):
             # load existing binary
             print("....  testsmaccl1 class __init__ exists binary")
@@ -677,6 +678,88 @@ class Smaccl(object):
         print(".... Smaccl: Smaccl  kernel (run) end  ")
         
         return ( rsurf, rsurf_0, dev_std, Jrtoa, Juo3, Juh2o, Jpre, Jtaup )
+
+    def run_dir(self, coeffs, tetas, tetav, phis, phiv,
+                uh2o, uo3, taup550, pression, rsurf, k1p, k2p,
+                iaero, NBLOOP=1):
+        '''
+        Run the SMAC forward (direct) model: surface -> TOA reflectance
+
+        Arguments: same as `run`, except
+
+            - rsurf : surface reflectance float32 arrays of dimension (NB,Z,XBLOCK,XGRID),
+                        replacing rtoa
+
+            - iaero: aerosol model number per ensemble member, (Naero,Z,XBLOCK,XGRID);
+                     cast to int16. Member 0 gives rtoa and the Jacobians, the
+                     others the ensemble spread dev_std (0 if Naero == 1)
+
+        Returns:
+
+            ( rtoa, rtoa_0, dev_std, Jrsurf, Juo3, Juh2o, Jpre, Jtaup ) where
+            rtoa_0 is the TOA reflectance without the BRDF coupling term and the
+            J* are the Jacobians of rtoa w.r.t. rsurf, uo3, uh2o, pression and taup550
+        '''
+        NBAND = coeffs.shape[0]
+        iaero = np.ascontiguousarray(iaero, dtype=np.int16)
+        Naero = iaero.shape[0]
+        if len(coeffs.shape) == 2:
+            nMod = coeffs.shape[1]
+        else:
+            nMod = 1
+
+        shp = rsurf.shape
+        assert shp[0] == NBAND
+        if (rsurf.ndim == 4) :
+            NZ  = shp[1]
+        else : NZ=1
+
+        # output arrays; Jpre / Jtaup are accumulated in place by the kernel
+        outputs = [np.empty(shp, dtype=np.float32) for _ in range(8)]
+        outputs_d = [cl.Buffer(self.clcontext, cl.mem_flags.READ_WRITE, o.nbytes) for o in outputs]
+
+        def to_device(a):
+            return cl.Buffer(self.clcontext, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=a)
+
+        rtoad, rtoa_0d, dev_stdd, Jrsurfd, Juo3d, Juh2od, Jpred, Jtaupd = outputs_d
+
+        print(".... Smaccl: Smaccl  kernel (run_dir) begin  ")
+
+        self.kernel_dir(self.clqueue, (shp[2],shp[3]), None,
+        to_device(coeffs),
+        to_device(tetas),
+        to_device(tetav),
+        to_device(phis),
+        to_device(phiv),
+        to_device(uh2o),
+        to_device(uo3),
+        to_device(taup550),
+        to_device(pression),
+        rtoad,
+        to_device(rsurf),
+        rtoa_0d,
+        dev_stdd,
+        Jrsurfd,
+        Juo3d,
+        Juh2od,
+        Jpred,
+        Jtaupd,
+        to_device(k1p),
+        to_device(k2p),
+        to_device(iaero),
+        np.int32(nMod),
+        np.int32(NBLOOP),
+        np.int32(NBAND),
+        np.int32(NZ),
+        np.int32(Naero)
+        )
+
+        for o, od in zip(outputs, outputs_d):
+            cl.enqueue_copy(self.clqueue, o, od)
+        self.clqueue.finish()
+        print(".... Smaccl: Smaccl  kernel (run_dir) end  ")
+
+        return tuple(outputs)
 
     def set_queue(self, xpu='GPU', environment='Default'):
         typedevice={

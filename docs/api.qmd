@@ -68,6 +68,24 @@ Important behavior:
 - Returns corrected reflectance and Jacobians used for uncertainty propagation
 - Performance profiling can be toggled with environment variable `SMACCL_PROFILE`
 
+#### `Smaccl.run_dir(coeffs, tetas, tetav, phis, phiv, uh2o, uo3, taup550, pression, rsurf, k1p, k2p, iaero, NBLOOP=1)`
+
+Forward (direct) model, the mirror of `run`: surface reflectance `rsurf`
+(shape `(NB, Z, XBLOCK, XGRID)`) replaces `rtoa`; other inputs follow `run`.
+`iaero` has shape `(Naero, Z, XBLOCK, XGRID)` and is cast to `int16`.
+
+```python
+rtoa, rtoa_0, dev_std, Jrsurf, Juo3, Juh2o, Jpre, Jtaup = S.run_dir(
+    coeffs, tetas, tetav, phis, phiv,
+    uh2o, uo3, taup550, pressure,
+    rsurf, k1p, k2p, iaero,
+)
+```
+
+- `rtoa`: TOA reflectance for aerosol member 0; `rtoa_0`: same without BRDF coupling
+- `dev_std`: aerosol-ensemble spread of `rtoa` (0 when `Naero == 1`)
+- Jacobians of `rtoa` w.r.t. `rsurf`, `uo3`, `uh2o`, pressure and `taup550`
+
 ## High-Level Interface API
 
 ### Module: `smaccl/ISmaccl.py`
