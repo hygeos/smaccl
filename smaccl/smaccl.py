@@ -416,9 +416,21 @@ def get_smac_coeffs_fromtxt(bands):
 
 class Smaccl(object):
 
-    def __init__(self, platform='GPU', environment='Default'):
+    # kernel selector: inverse model (TOA -> surface) or forward model (surface -> TOA)
+    MODES = {'smaccl': 'run', 'smaccl_dir': 'run_dir'}
+
+    def __init__(self, platform='GPU', environment='Default', mode='smaccl'):
+        '''
+        mode : 'smaccl' (default, inverse model, use `run`) or 'smaccl_dir'
+               (forward model, use `run_dir`). Only the selected kernel is
+               loaded; the two kernels are never run by the same instance.
+        '''
 
 #        print("....  testsmaccl1 class __init__ ")
+
+        if mode not in self.MODES:
+            raise ValueError("mode must be one of {}, got {!r}".format(list(self.MODES), mode))
+        self.mode = mode
 
         if exists(src_device):
 
@@ -469,8 +481,8 @@ class Smaccl(object):
 
 #            print ('... Load Kernel')
             # load the kernel
-            self.kernel = cl.Kernel(program, 'smaccl')
-            self.kernel_dir = cl.Kernel(program, 'smaccl_dir')
+            # load only the kernel selected by mode
+            self.kernel = cl.Kernel(program, self.mode)
 
         elif exists(binname):
             # load existing binary
@@ -512,8 +524,21 @@ class Smaccl(object):
         #outputArray = np.array(shp, dtype=dtype)
         
         #return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY, outputArray.nbytes)
-        return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=buf)  # 
-        
+        return cl.Buffer(self.clcontext, cl.mem_flags.WRITE_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=buf)  #
+
+    def _check_mode(self, mode):
+        if self.mode != mode:
+            raise RuntimeError("{}() needs Smaccl(mode={!r}); this instance was created with mode={!r}"
+                               .format(self.MODES[mode], mode, self.mode))
+
+    def launch(self, *args, **kwargs):
+        '''
+        Run the kernel selected at construction: `run` for mode='smaccl'
+        (args end with rtoa, k1p, k2p, iaero) or `run_dir` for mode='smaccl_dir'
+        (args end with rsurf, k1p, k2p, iaero).
+        '''
+        return getattr(self, self.MODES[self.mode])(*args, **kwargs)
+
 
     def run(self, coeffs, tetas, tetav, phis, phiv,
                 uh2o, uo3, taup550, pression, rtoa, k1p, k2p,
@@ -565,6 +590,7 @@ class Smaccl(object):
             - NBLOOP: number of runs within a thread for the same pixel (should be used for Monte Carlo draws)
 
         '''
+        self._check_mode('smaccl')
         NBAND = coeffs.shape[0]
         Naero = iaero.shape[0]
         if len(coeffs.shape) == 2:
@@ -700,6 +726,7 @@ class Smaccl(object):
             rtoa_0 is the TOA reflectance without the BRDF coupling term and the
             J* are the Jacobians of rtoa w.r.t. rsurf, uo3, uh2o, pression and taup550
         '''
+        self._check_mode('smaccl_dir')
         NBAND = coeffs.shape[0]
         iaero = np.ascontiguousarray(iaero, dtype=np.int16)
         Naero = iaero.shape[0]
@@ -725,7 +752,7 @@ class Smaccl(object):
 
         print(".... Smaccl: Smaccl  kernel (run_dir) begin  ")
 
-        self.kernel_dir(self.clqueue, (shp[2],shp[3]), None,
+        self.kernel(self.clqueue, (shp[2],shp[3]), None,
         to_device(coeffs),
         to_device(tetas),
         to_device(tetav),

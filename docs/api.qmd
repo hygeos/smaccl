@@ -36,6 +36,12 @@ Container class representing one SMAC coefficient set.
 
 OpenCL-backed correction engine.
 
+`Smaccl(platform='GPU', environment='Default', mode='smaccl')`: `mode` selects
+the single kernel loaded by the instance — `'smaccl'` (default, inverse model,
+`run`) or `'smaccl_dir'` (forward model, `run_dir`). The two kernels are never
+run by the same instance: calling the other method raises `RuntimeError`.
+`launch(...)` runs whichever kernel was selected.
+
 Common usage pattern:
 
 ```python
@@ -70,11 +76,12 @@ Important behavior:
 
 #### `Smaccl.run_dir(coeffs, tetas, tetav, phis, phiv, uh2o, uo3, taup550, pression, rsurf, k1p, k2p, iaero, NBLOOP=1)`
 
-Forward (direct) model, the mirror of `run`: surface reflectance `rsurf`
+Forward (direct) model, the mirror of `run`; requires `Smaccl(..., mode='smaccl_dir')`: surface reflectance `rsurf`
 (shape `(NB, Z, XBLOCK, XGRID)`) replaces `rtoa`; other inputs follow `run`.
 `iaero` has shape `(Naero, Z, XBLOCK, XGRID)` and is cast to `int16`.
 
 ```python
+S = Smaccl("CPU", mode="smaccl_dir")
 rtoa, rtoa_0, dev_std, Jrsurf, Juo3, Juh2o, Jpre, Jtaup = S.run_dir(
     coeffs, tetas, tetav, phis, phiv,
     uh2o, uo3, taup550, pressure,
