@@ -275,23 +275,27 @@ __kernel void smaccl_dir(
     __global float *taup550_, __global float *pression_,
     __global float *rtoa,
     __global float *rsurf_,
+    __global float *rtoa_0, __global float *dev_std,
     __global float *Jr, __global float *Juo3,
     __global float *Juh2o, __global float *Jpre,
     __global float *Jtaup,
     __global float *k1p_, __global float *k2p_,
-    __global int *iaero, int NMOD,
-    int NBLOOPd, int NBANDd, int NZd
+    __global short *iaero, int NMOD,
+    int NBLOOPd, int NBANDd, int NZd, int Naerod
 )
 ```
 
 Inputs:
 
-- Same geometry/ancillary/BRDF conventions as `smaccl`
+- Same geometry/ancillary/BRDF/aerosol-ensemble conventions as `smaccl`
+  (`iaero` is `short`, shape `Naerod * NZd * M`)
 - `rsurf_`: input surface reflectance
 
 Outputs:
 
-- `rtoa`: simulated top-of-atmosphere reflectance
+- `rtoa`: simulated top-of-atmosphere reflectance (aerosol member 0)
+- `rtoa_0`: simulated TOA reflectance without BRDF coupling term
+- `dev_std`: aerosol-ensemble spread of `rtoa` (0 when `Naerod == 1`)
 - Jacobians: `Jr`, `Juo3`, `Juh2o`, `Jpre`, `Jtaup`
 
 ### Indexing and Shapes
