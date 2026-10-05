@@ -101,7 +101,7 @@ rtoa, rtoa_0, dev_std, Jrsurf, Juo3, Juh2o, Jpre, Jtaup = S.run_dir(
 
 High-level wrapper around `Smaccl` for xarray/dask workflows.
 
-#### `ISmaccl.__init__(config, frac_aer_model, ca, XBLOCK=128, XGRID=128, breakpoint=False, ancillary=False, **kwargs)`
+#### `ISmaccl.__init__(config, frac_aer_model, ca, XBLOCK=128, XGRID=128, breakpoint=False, ancillary=False, mode='smaccl', **kwargs)`
 
 Initialize a configured interface object.
 
@@ -109,6 +109,10 @@ Initialize a configured interface object.
 - `frac_aer_model`: aerosol model fraction reference table
 - `ca`: ancillary model/coeff mapping used by downstream calls
 - `kwargs['platform']`: expected OpenCL platform target
+- `mode`: kernel selector passed to `Smaccl` — `'smaccl'` (default, inverse
+  model) or `'smaccl_dir'` (forward model). In `'smaccl_dir'` mode the pipeline
+  keeps its variable names: the `TOA` input bands are read as surface
+  reflectance and `rTOC` / `rTOC_0` hold the modelled TOA reflectance.
 
 #### `ISmaccl.run_block(l2_data, batch_size=512)`
 

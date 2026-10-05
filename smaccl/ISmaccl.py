@@ -19,12 +19,19 @@ class ISmaccl(object):
     for initializing and using the Smaccl library.
     """
 
-    def __init__(self, config, frac_aer_model, ca, XBLOCK=128, XGRID=128, breakpoint=False, ancillary=False, *args, **kwargs):
+    def __init__(self, config, frac_aer_model, ca, XBLOCK=128, XGRID=128, breakpoint=False, ancillary=False, *args, mode='smaccl', **kwargs):
         """
         Initialize the ISmaccl instance with the provided arguments.
+
+        mode : 'smaccl' (default, inverse model: TOA -> surface) or 'smaccl_dir'
+               (forward model: surface -> TOA), passed to Smaccl. In 'smaccl_dir'
+               mode the pipeline keeps its variable names: the 'TOA' input bands
+               are read as surface reflectance and 'rTOC' / 'rTOC_0' hold the
+               modelled TOA reflectance (with / without BRDF coupling).
         """
 #        self.smaccl = Smaccl(*args, **kwargs)
-        self.smaccl = Smaccl(platform=kwargs['platform'])
+        self.smaccl = Smaccl(platform=kwargs['platform'], mode=mode)
+        self.mode = mode
         self.config = config
 
         # SMACG configuration
@@ -382,7 +389,8 @@ class ISmaccl(object):
         pressure_ext = np.reshape(pressure_ext,(Z,self.XBLOCK,self.XGRID),    order='C')
         iaero_ext    = np.reshape(iaero_ext   ,(Naero, Z,self.XBLOCK,self.XGRID),    order='C')
 
-        (rsurf_ext, rsurf0_ext, dev_std_ext, Jrtoa_ext, Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = self.smaccl.run(
+        # runs the kernel selected by mode (smaccl -> run, smaccl_dir -> run_dir)
+        (rsurf_ext, rsurf0_ext, dev_std_ext, Jrtoa_ext, Juo3_ext,Juh2o_ext,Jpre_ext,Jtaup_ext) = self.smaccl.launch(
                 coeffs, tetas_ext, tetav_ext,phis_ext, phiv_ext, uh2o_ext, uo3_ext, 
                 taup550_ext, pressure_ext, rtoa_ext, k1p_ext,
                 k2p_ext, iaero_ext, 
