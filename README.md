@@ -71,6 +71,20 @@ Or through pixi:
 pixi run tests
 ```
 
+The regression suite (`tests/test_smaccl_*.py`, `tests/test_ismaccl_pipeline.py`,
+`tests/test_regression_reference.py`) is self-contained: synthetic SMAC
+coefficients, OpenCL on CPU through pocl (skipped if pocl is not installed).
+It checks the forward / inverse round trip, the Jacobians against numerical
+derivatives, the aerosol-ensemble spread, the `mode` selector, and compares
+both kernels with frozen outputs in `tests/data/reference_outputs.npz`.
+
+After an intended change of the numerical results, regenerate the reference
+and commit it with the change:
+
+```bash
+SMACCL_UPDATE_REFERENCE=1 pytest tests/test_regression_reference.py
+```
+
 ## Notes
 
 - Some bundled tests rely on external datasets/paths that may not be available on
